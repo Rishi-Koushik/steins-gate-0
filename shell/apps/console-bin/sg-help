@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+cat <<'H'
+SG console — a real shell. Extra commands:
+  tabbed           switch to tabbed mode (Ctrl+Shift+T)
+  fullscreen       toggle full screen (F11)
+  new-tab          open a new tab in tabbed mode
+  tall | small     extend the console up / minimise it
+  float            pop the console out / dock it again
+  lock [--quick]   lock the laptop (boot clip → title screen; --quick skips the clip)
+  phone            open the Phone Trigger (Super+P)
+  worldline        show the divergence number
+  date · whoami · clear · el psy kongroo
+
+Shortcuts:
+  Alt+P / Alt+C    toggle console
+  Ctrl+Shift+T     open new tab
+  Ctrl+Shift+W     close active tab
+  Ctrl+PageUp/Down switch tabs (also Alt+1..9, Ctrl+Tab)
+  F11              toggle fullscreen
+  Ctrl+Shift+F     search in terminal scrollback
+  Ctrl++ / Ctrl+-  zoom font in / out (Ctrl+0 resets)
+  Ctrl+Shift+C / V copy / paste (Shift+Insert / Ctrl+Insert)
+  Ctrl+Shift+A     select all text
+  Ctrl+Click       open hovered URL in browser
+  Right-Click      open context menu
+
+Drag & drop:
+  Drop files from file manager directly into terminal.
+(bash's own help: `builtin help`)
+H

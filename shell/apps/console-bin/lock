@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Lock with the turn-off → lock transition: the boot clip plays on the lock screen itself.
+dir="${XDG_RUNTIME_DIR:-/tmp}/sg-shell"; mkdir -p "$dir"
+[ "$1" = "--quick" ] || : > "$dir/boot-clip"
+"$(dirname "$0")/sg-say" "Locking … (turn-off → lock transition)"
+sleep 0.4
+loginctl lock-session

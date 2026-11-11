@@ -1,0 +1,1091 @@
+#!/usr/bin/python3 -I
+"""SG console: a real terminal (VTE) skinned like the game's text bar.
+
+  sg-console                      toggle (Alt+P / Alt+C)
+  sg-console --tabbed             switch to tabbed mode
+  sg-console --fullscreen         toggle full screen
+  sg-console --new-tab            open a new tab
+  sg-console --tall | --normal | --small | --float | --hide | --show
+
+Docked at the bottom edge by the sg-shell GNOME extension (Wayland clients cannot
+position themselves); floating when popped out; full screen when requested in tabbed mode.
+"""
+import math
+import os
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import sg_common as C
+C.forward_to_running("local.amadeus.SgConsole", sys.argv)
+
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Vte", "3.91")
+from gi.repository import Gtk, Gdk, Gio, GLib, Vte, Pango
+
+import sg_common as C
+
+CSS = """
+window.sgcon { background: transparent; }
+window.sgcon vte-terminal { background-color: transparent; padding: 0; }
+.sgcon-chip, .sgcon-ctl {
+  font: 800 13px "Adwaita Sans", sans-serif; color: #e8e8e8; background: rgba(0,0,0,.35);
+  border: 2px solid #35e0e6; border-radius: 4px; box-shadow: 2px 2px 0 #e83f8f;
+  padding: 0 10px; min-height: 22px; min-width: 0;
+}
+.sgcon-ctl { font-size: 12px; padding: 0 8px; }
+.sgcon-chip:hover, .sgcon-ctl:hover { background: #fff; color: #000; }
+.sgcon-chip.active, .sgcon-ctl.active {
+  background: #35e0e6; color: #081614; font-weight: 900;
+  box-shadow: 2px 2px 0 #e83f8f, 0 0 8px rgba(53, 224, 230, 0.6);
+}
+.sgcon-auto {
+  font: 800 24px "Adwaita Sans", sans-serif; color: #111; background: #f4f4f4;
+  border: 2px solid #e83f8f; border-right: 0; border-radius: 0; padding: 0 12px 0 20px; min-height: 0;
+}
+.sgcon-auto:hover { background: #fff; }
+
+/* Tabs */
+.sgcon-tab-bar {
+  background: transparent;
+  margin-bottom: 2px;
+}
+.sgcon-tab {
+  font: 700 12px "Adwaita Sans", sans-serif;
+  color: #b0d0d2;
+  background: rgba(8, 22, 20, 0.75);
+  border: 1px solid rgba(53, 224, 230, 0.45);
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  padding: 2px 8px;
+  min-height: 24px;
+}
+.sgcon-tab:hover {
+  background: rgba(18, 48, 45, 0.9);
+  color: #fff;
+  border-color: #35e0e6;
+}
+.sgcon-tab.active {
+  color: #ffffff;
+  background: rgba(10, 30, 27, 0.95);
+  border: 2px solid #35e0e6;
+  border-bottom: 2px solid #e83f8f;
+  box-shadow: 0 2px 4px rgba(232, 63, 143, 0.4);
+}
+.sgcon-tab-close {
+  font: 800 12px "Adwaita Sans", sans-serif;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  margin-left: 6px;
+  min-height: 0;
+  min-width: 0;
+}
+.sgcon-tab-close:hover {
+  color: #e83f8f;
+  background: rgba(232, 63, 143, 0.25);
+  border-radius: 2px;
+}
+.sgcon-tab-add {
+  font: 800 13px "Adwaita Sans", sans-serif;
+  color: #35e0e6;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #35e0e6;
+  border-radius: 4px;
+  padding: 0 8px;
+  min-height: 22px;
+  min-width: 22px;
+}
+.sgcon-tab-add:hover {
+  background: #35e0e6;
+  color: #081614;
+}
+
+/* Search bar */
+.sgcon-search-box {
+  background: rgba(8, 22, 20, 0.95);
+  border: 2px solid #35e0e6;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 #e83f8f;
+  padding: 3px 8px;
+}
+.sgcon-search-entry {
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  border: 1px solid rgba(53, 224, 230, 0.5);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font: 12px "Adwaita Mono", monospace;
+  min-width: 170px;
+}
+.sgcon-search-entry:focus {
+  border-color: #35e0e6;
+}
+.sgcon-search-btn {
+  font: 800 11px "Adwaita Sans", sans-serif;
+  color: #e8e8e8;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid #35e0e6;
+  border-radius: 3px;
+  padding: 1px 6px;
+  min-height: 20px;
+}
+.sgcon-search-btn:hover {
+  background: #35e0e6;
+  color: #081614;
+}
+
+/* Context menu popover */
+.sgcon-popover contents {
+  background: rgba(8, 22, 20, 0.96);
+  border: 2px solid #35e0e6;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 #e83f8f;
+  padding: 4px;
+}
+.sgcon-menu-item {
+  font: 600 12px "Adwaita Sans", sans-serif;
+  color: #e8e8e8;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 4px 10px;
+}
+.sgcon-menu-item:hover {
+  background: #35e0e6;
+  color: #081614;
+  font-weight: 800;
+}
+.sgcon-menu-sep {
+  background: rgba(53, 224, 230, 0.3);
+  min-height: 1px;
+  margin: 3px 0;
+}
+
+/* Scrollbar */
+scrollbar {
+  background-color: transparent;
+  border: none;
+}
+scrollbar slider {
+  background-color: rgba(53, 224, 230, 0.35);
+  border-radius: 4px;
+  min-width: 6px;
+  min-height: 24px;
+}
+scrollbar slider:hover {
+  background-color: rgba(53, 224, 230, 0.85);
+}
+scrollbar slider:active {
+  background-color: #e83f8f;
+}
+"""
+
+SMALL_H, MIN_H, MAX_H = 56, 56, 640
+FLOAT_W, FLOAT_H = 760, 300
+
+
+class ConsoleTab:
+    """Represents a single terminal tab running its own shell session."""
+    def __init__(self, console, tab_id):
+        self.console = console
+        self.tab_id = tab_id
+        self.last_url = None
+
+        # Container box
+        self.box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.box.set_hexpand(True)
+        self.box.set_vexpand(True)
+
+        # Terminal
+        self.term = Vte.Terminal()
+        self.term.set_clear_background(False)
+        self.term.set_color_background(Gdk.RGBA(0, 0, 0, 0))
+        fg = Gdk.RGBA(); fg.parse("#f2f2f2")
+        orange = Gdk.RGBA(); orange.parse("#f7a600")
+        self.term.set_color_foreground(fg)
+        self.term.set_color_cursor(orange)
+        self.term.set_color_bold(None)
+        font_str = C.cfg_get(self.console.cfg, "console", "font", "Adwaita Mono 13")
+        self.term.set_font(Pango.FontDescription.from_string(font_str))
+        self.term.set_scrollback_lines(10000)
+        self.term.set_cursor_blink_mode(Vte.CursorBlinkMode.ON)
+        self.term.set_hexpand(True)
+        self.term.set_vexpand(True)
+        self.box.append(self.term)
+
+        # Scrollbar
+        self.scroll = Gtk.Scrollbar(orientation=Gtk.Orientation.VERTICAL)
+        self.scroll.set_adjustment(self.term.get_vadjustment())
+        self.box.append(self.scroll)
+
+        # URL Match regex
+        try:
+            regex = Vte.Regex.new_for_match(r"(?:https?|ftp|file)://[^\s\"'<>]+", -1, 0x00000400)
+            self.term.match_add_regex(regex, 0)
+        except Exception:
+            pass
+
+        # Tab button in the tab bar
+        self.tab_btn = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.tab_btn.add_css_class("sgcon-tab")
+
+        self.title_label = Gtk.Label(label=f"{tab_id}: ~")
+        self.tab_btn.append(self.title_label)
+
+        close_btn = Gtk.Button(label="×", focusable=False)
+        close_btn.add_css_class("sgcon-tab-close")
+        close_btn.connect("clicked", lambda *_: self.console.close_tab(self))
+        self.tab_btn.append(close_btn)
+
+        click_tab = Gtk.GestureClick()
+        click_tab.connect("pressed", lambda *_: self.console.set_active_tab(self))
+        self.tab_btn.add_controller(click_tab)
+
+        self._setup_controllers()
+
+        self.term.connect("child-exited", lambda *_: self.console.on_child_exited(self))
+        self.term.connect("window-title-changed", self.on_title_changed)
+        self.term.connect("bell", lambda *_: self.console.ring_bell())
+
+        self.spawn()
+
+    def _setup_controllers(self):
+        # Keyboard controller
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_key)
+        self.term.add_controller(keys)
+
+        # Mouse motion controller (for URL hover pointer)
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", self.on_motion)
+        self.term.add_controller(motion)
+
+        # Click controller (Ctrl+Click link, Middle click paste, Right click menu)
+        click = Gtk.GestureClick()
+        click.set_button(0)
+        click.connect("pressed", self.on_click)
+        self.term.add_controller(click)
+
+        # Scroll controller (Ctrl + scroll for zoom)
+        scroll_ctrl = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.VERTICAL)
+        scroll_ctrl.connect("scroll", self.on_scroll)
+        self.term.add_controller(scroll_ctrl)
+
+        # Drop target (drag & drop files into terminal)
+        drop = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
+        drop.connect("drop", self.on_drop)
+        self.term.add_controller(drop)
+
+    def spawn(self):
+        shell = C.cfg_get(self.console.cfg, "console", "shell", "") or os.environ.get("SHELL") or "/bin/bash"
+        bindir = str(C.DATA_DIR / "console-bin")
+        env = dict(os.environ)
+        env["PATH"] = bindir + os.pathsep + env.get("PATH", "/usr/bin")
+        env["SG_CONSOLE"] = "1"
+        env["TERM"] = "xterm-256color"
+        env["COLORTERM"] = "truecolor"
+        argv = [shell]
+        rc = C.DATA_DIR / "console-bin" / "sg-bashrc"
+        if os.path.basename(shell) == "bash" and rc.exists():
+            argv = [shell, "--rcfile", str(rc)]
+        self.term.spawn_async(Vte.PtyFlags.DEFAULT, str(Path.home()), argv,
+                              [f"{k}={v}" for k, v in env.items()], GLib.SpawnFlags.DEFAULT,
+                              None, None, -1, None, None)
+
+    def on_key(self, _ctrl, keyval, _code, state):
+        ctrl = Gdk.ModifierType.CONTROL_MASK
+        shift = Gdk.ModifierType.SHIFT_MASK
+        alt = Gdk.ModifierType.ALT_MASK
+        ctrl_shift = ctrl | shift
+
+        # Fullscreen: F11
+        if keyval == Gdk.KEY_F11:
+            self.console.toggle_fullscreen()
+            return True
+
+        # Ctrl+Shift shortcuts
+        if (state & ctrl_shift) == ctrl_shift:
+            if keyval in (Gdk.KEY_C, Gdk.KEY_c):
+                self.term.copy_clipboard_format(Vte.Format.TEXT)
+                return True
+            if keyval in (Gdk.KEY_V, Gdk.KEY_v):
+                self.term.paste_clipboard()
+                return True
+            if keyval in (Gdk.KEY_A, Gdk.KEY_a):
+                self.term.select_all()
+                return True
+            if keyval in (Gdk.KEY_T, Gdk.KEY_t):
+                self.console.new_tab()
+                return True
+            if keyval in (Gdk.KEY_W, Gdk.KEY_w):
+                self.console.close_tab(self)
+                return True
+            if keyval in (Gdk.KEY_F, Gdk.KEY_f):
+                self.console.toggle_search()
+                return True
+            if keyval in (Gdk.KEY_Page_Up, Gdk.KEY_Left, Gdk.KEY_ISO_Left_Tab):
+                self.console.prev_tab()
+                return True
+            if keyval in (Gdk.KEY_Page_Down, Gdk.KEY_Right, Gdk.KEY_Tab):
+                self.console.next_tab()
+                return True
+            if keyval in (Gdk.KEY_plus, Gdk.KEY_equal):
+                self.zoom(1.1)
+                return True
+
+        # Ctrl shortcuts (without Shift)
+        if (state & (ctrl | shift | alt)) == ctrl:
+            if keyval == Gdk.KEY_Page_Up:
+                self.console.prev_tab()
+                return True
+            if keyval in (Gdk.KEY_Page_Down, Gdk.KEY_Tab):
+                self.console.next_tab()
+                return True
+            if keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self.zoom(1.1)
+                return True
+            if keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+                self.zoom(1.0 / 1.1)
+                return True
+            if keyval in (Gdk.KEY_0, Gdk.KEY_KP_0):
+                self.term.set_font_scale(1.0)
+                return True
+            if keyval == Gdk.KEY_Insert:
+                self.term.copy_clipboard_format(Vte.Format.TEXT)
+                return True
+
+        # Shift shortcuts
+        if (state & (ctrl | shift | alt)) == shift:
+            if keyval == Gdk.KEY_Insert:
+                self.term.paste_clipboard()
+                return True
+            if keyval == Gdk.KEY_Home:
+                adj = self.term.get_vadjustment()
+                if adj:
+                    adj.set_value(adj.get_lower())
+                return True
+            if keyval == Gdk.KEY_End:
+                adj = self.term.get_vadjustment()
+                if adj:
+                    adj.set_value(adj.get_upper() - adj.get_page_size())
+                return True
+
+        # Alt+1 .. Alt+9: tab switching
+        if (state & (ctrl | shift | alt)) == alt:
+            if Gdk.KEY_1 <= keyval <= Gdk.KEY_9:
+                self.console.switch_to_tab_index(keyval - Gdk.KEY_1)
+                return True
+
+        return False
+
+    def on_motion(self, _ctrl, x, y):
+        url = self.term.check_hyperlink_at(x, y)
+        if not url:
+            m = self.term.check_match_at(x, y)
+            if m and m[0]:
+                url = m[0]
+        if url:
+            self.last_url = url
+            self.term.set_cursor_from_name("pointer")
+        else:
+            self.last_url = None
+            self.term.set_cursor_from_name("text")
+
+    def on_click(self, gesture, _n_press, x, y):
+        btn = gesture.get_current_button()
+        if btn == 1:
+            state = gesture.get_current_event_state()
+            if (state & Gdk.ModifierType.CONTROL_MASK) and self.last_url:
+                try:
+                    Gio.AppInfo.launch_default_for_uri(self.last_url, None)
+                    return True
+                except Exception:
+                    pass
+        elif btn == 2:
+            self.term.paste_primary()
+            return True
+        elif btn == 3:
+            self.console.show_context_menu(self, x, y)
+            return True
+        return False
+
+    def on_scroll(self, ctrl, _dx, dy):
+        if ctrl.get_current_event_state() & Gdk.ModifierType.CONTROL_MASK:
+            if dy < 0:
+                self.zoom(1.1)
+                return True
+            elif dy > 0:
+                self.zoom(1.0 / 1.1)
+                return True
+        return False
+
+    def on_drop(self, _target, value, _x, _y):
+        if isinstance(value, Gdk.FileList):
+            files = value.get_files()
+            paths = [f.get_path() for f in files if f.get_path()]
+            if paths:
+                text = " ".join(shlex.quote(p) for p in paths) + " "
+                self.term.feed_child(text.encode("utf-8"))
+                return True
+        return False
+
+    def zoom(self, factor):
+        scale = max(0.5, min(3.0, self.term.get_font_scale() * factor))
+        self.term.set_font_scale(scale)
+
+    def on_title_changed(self, _term):
+        raw = self.term.props.window_title or ""
+        if raw:
+            part = raw.split(": ")[-1].strip() if ": " in raw else raw.strip()
+            if len(part) > 16:
+                part = part[:15] + "…"
+            self.title_label.set_label(f"{self.tab_id}: {part}")
+        else:
+            self.title_label.set_label(f"{self.tab_id}: bash")
+
+
+class Console(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="local.amadeus.SgConsole",
+                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.win = None
+        self.cfg = C.load_config()
+        self.h_normal = int(C.cfg_get(self.cfg, "console", "height", 200))
+        self.h_tall = int(C.cfg_get(self.cfg, "console", "tall_height", 480))
+        self.state = "normal"
+        self.floating = False
+        self.tabbed = False
+        self.is_fullscreen = False
+        self.height = self.h_normal
+
+        self.tabs = []
+        self.active_tab = None
+        self.tab_seq = 1
+        self.popover = None
+        self.search_case_sensitive = False
+
+    # ---- command line (also from already-running instance) ----
+    def do_command_line(self, cl):
+        args = cl.get_arguments()[1:]
+        op = args[0].lstrip("-") if args else "toggle"
+        if op in ("h", "help"):
+            cl.printerr_literal(__doc__)
+            return 0
+
+        first = self.win is None
+        if first:
+            self.build()
+        if op == "toggle":
+            self.set_shown(True if first else not self.win.get_visible())
+        elif op == "hide":
+            self.set_shown(False)
+        elif op == "show":
+            self.set_shown(True)
+        elif op in ("tall", "normal", "small"):
+            self.set_state(op)
+            self.set_shown(True)
+        elif op == "float":
+            self.set_float(not self.floating)
+            self.set_shown(True)
+        elif op == "tabbed":
+            self.toggle_tabbed(True)
+            self.set_shown(True)
+        elif op == "fullscreen":
+            self.toggle_fullscreen()
+            self.set_shown(True)
+        elif op in ("new-tab", "tab"):
+            self.new_tab()
+            self.set_shown(True)
+        else:
+            cl.printerr_literal(__doc__)
+            if first:
+                self.quit()
+            return 2
+        return 0
+
+    # ---- UI ----
+    def build(self):
+        css = Gtk.CssProvider()
+        css.load_from_string(CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.win = Gtk.ApplicationWindow(application=self, decorated=False, resizable=True)
+        self.win.add_css_class("sgcon")
+        self.win.connect("close-request", lambda *_: (self.set_shown(False), True)[1])
+
+        overlay = Gtk.Overlay()
+        self.win.set_child(overlay)
+
+        # Background drawing canvas
+        bg = Gtk.DrawingArea(hexpand=True, vexpand=True)
+        bg.set_draw_func(self.draw_bar)
+        overlay.set_child(bg)
+
+        # Terminal stack
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.NONE)
+        overlay.add_overlay(self.stack)
+
+        # Tab bar scroll & box
+        tab_scroll = self.tab_scroll = Gtk.ScrolledWindow(valign=Gtk.Align.START, halign=Gtk.Align.START,
+                                                          margin_start=16, margin_top=8, margin_end=200)
+        tab_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+
+        tab_bar_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        tab_bar_box.add_css_class("sgcon-tab-bar")
+
+        self.tabs_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        tab_bar_box.append(self.tabs_container)
+
+        add_tab_btn = Gtk.Button(label="+", tooltip_text="New Tab (Ctrl+Shift+T)", focusable=False)
+        add_tab_btn.add_css_class("sgcon-tab-add")
+        add_tab_btn.connect("clicked", lambda *_: self.new_tab())
+        tab_bar_box.append(add_tab_btn)
+
+        tab_scroll.set_child(tab_bar_box)
+        tab_scroll.set_visible(False)
+        overlay.add_overlay(tab_scroll)
+
+        # Search bar
+        self.search_box = self.build_search_bar()
+        overlay.add_overlay(self.search_box)
+
+        # Bottom-left chips
+        chips = Gtk.Box(spacing=8, halign=Gtk.Align.START, valign=Gtk.Align.END,
+                        margin_start=12, margin_bottom=12)
+
+        sys_btn = Gtk.Button(label="SYSTEM", tooltip_text="System settings", focusable=False)
+        sys_btn.add_css_class("sgcon-chip")
+        sys_btn.connect("clicked", self.open_settings)
+        chips.append(sys_btn)
+
+        tab_chip = self.tab_chip = Gtk.Button(label="TABBED", tooltip_text="Toggle Tabbed Mode / Tabs (Ctrl+Shift+T)", focusable=False)
+        tab_chip.add_css_class("sgcon-chip")
+        tab_chip.connect("clicked", lambda *_: self.toggle_tabbed())
+        chips.append(tab_chip)
+
+        auto_chip = Gtk.Button(label="AUTO", tooltip_text="Toggle tall / normal", focusable=False)
+        auto_chip.add_css_class("sgcon-chip")
+        auto_chip.connect("clicked", lambda *_: self.set_state("normal" if self.state == "tall" else "tall"))
+        chips.append(auto_chip)
+
+        skip_chip = Gtk.Button(label="SKIP", tooltip_text="Hide the console (Alt+P / Alt+C)", focusable=False)
+        skip_chip.add_css_class("sgcon-chip")
+        skip_chip.connect("clicked", lambda *_: self.set_shown(False))
+        chips.append(skip_chip)
+
+        overlay.add_overlay(chips)
+
+        # Top-right controls
+        ctl = Gtk.Box(spacing=8, halign=Gtk.Align.END, valign=Gtk.Align.START, margin_end=12, margin_top=10)
+
+        grow_btn = Gtk.Button(label="▲", tooltip_text="Extend up", focusable=False)
+        grow_btn.add_css_class("sgcon-ctl")
+        grow_btn.connect("clicked", self.grow)
+        ctl.append(grow_btn)
+
+        shrink_btn = Gtk.Button(label="▼", tooltip_text="Collapse down", focusable=False)
+        shrink_btn.add_css_class("sgcon-ctl")
+        shrink_btn.connect("clicked", self.shrink)
+        ctl.append(shrink_btn)
+
+        float_btn = Gtk.Button(label="⧉", tooltip_text="Pop out / dock", focusable=False)
+        float_btn.add_css_class("sgcon-ctl")
+        float_btn.connect("clicked", lambda *_: self.set_float(not self.floating))
+        ctl.append(float_btn)
+
+        fs_btn = self.fs_btn = Gtk.Button(label="⛶", tooltip_text="Toggle Fullscreen (F11)", focusable=False)
+        fs_btn.add_css_class("sgcon-ctl")
+        fs_btn.connect("clicked", lambda *_: self.toggle_fullscreen())
+        ctl.append(fs_btn)
+
+        overlay.add_overlay(ctl)
+        self.ctl = ctl
+
+        # Right-hand ➔AUTO tab (minimises, like the demo)
+        auto = self.auto = Gtk.Button(label="➔AUTO", focusable=False, halign=Gtk.Align.END,
+                                      valign=Gtk.Align.END, margin_bottom=40, tooltip_text="Collapse down")
+        auto.add_css_class("sgcon-auto")
+        auto.connect("clicked", self.shrink)
+        overlay.add_overlay(auto)
+
+        # Top edge: drag to resize (docked) / move (floating)
+        grip = Gtk.DrawingArea(valign=Gtk.Align.START, hexpand=True, height_request=10)
+        grip.set_cursor(Gdk.Cursor.new_from_name("ns-resize"))
+        drag = Gtk.GestureDrag()
+        drag.connect("drag-begin", self.on_drag_begin)
+        drag.connect("drag-update", self.on_drag_update)
+        grip.add_controller(drag)
+        overlay.add_overlay(grip)
+        self.grip = grip
+
+        # Spawn initial tab
+        self.new_tab()
+        self.apply_size()
+
+    # ---- Tab management ----
+    def new_tab(self):
+        tab = ConsoleTab(self, self.tab_seq)
+        self.tab_seq += 1
+        self.tabs.append(tab)
+        self.stack.add_child(tab.box)
+        self.tabs_container.append(tab.tab_btn)
+        self.set_active_tab(tab)
+        if len(self.tabs) > 1 and not self.tabbed:
+            self.toggle_tabbed(True)
+        self.update_tab_bar_visibility()
+        self.apply_size()
+        return tab
+
+    def set_active_tab(self, tab):
+        if tab not in self.tabs:
+            return
+        self.active_tab = tab
+        self.stack.set_visible_child(tab.box)
+        for t in self.tabs:
+            if t == tab:
+                t.tab_btn.add_css_class("active")
+            else:
+                t.tab_btn.remove_css_class("active")
+        tab.term.grab_focus()
+        if self.search_box.get_visible():
+            self.on_search_changed(self.search_entry)
+
+    def close_tab(self, tab):
+        if tab not in self.tabs:
+            return
+        idx = self.tabs.index(tab)
+        self.tabs.remove(tab)
+        self.tabs_container.remove(tab.tab_btn)
+        self.stack.remove(tab.box)
+
+        if self.tabs:
+            new_idx = min(idx, len(self.tabs) - 1)
+            self.set_active_tab(self.tabs[new_idx])
+            self.update_tab_bar_visibility()
+        else:
+            self.active_tab = None
+            self.set_shown(False)
+            self.new_tab()
+
+    def prev_tab(self):
+        if len(self.tabs) <= 1 or not self.active_tab:
+            return
+        idx = self.tabs.index(self.active_tab)
+        self.set_active_tab(self.tabs[(idx - 1) % len(self.tabs)])
+
+    def next_tab(self):
+        if len(self.tabs) <= 1 or not self.active_tab:
+            return
+        idx = self.tabs.index(self.active_tab)
+        self.set_active_tab(self.tabs[(idx + 1) % len(self.tabs)])
+
+    def switch_to_tab_index(self, idx):
+        if 0 <= idx < len(self.tabs):
+            self.set_active_tab(self.tabs[idx])
+
+    def on_child_exited(self, tab):
+        if len(self.tabs) > 1:
+            self.close_tab(tab)
+        else:
+            tab.spawn()
+
+    def update_tab_bar_visibility(self):
+        visible = (self.tabbed or len(self.tabs) > 1) and not (self.height <= SMALL_H + 4 and not self.is_fullscreen)
+        self.tab_scroll.set_visible(visible)
+
+    # ---- Mode toggles ----
+    def toggle_tabbed(self, force=None):
+        if force is not None:
+            self.tabbed = force
+        else:
+            self.tabbed = not self.tabbed
+
+        if self.tabbed:
+            self.tab_chip.add_css_class("active")
+            if self.state in ("normal", "small"):
+                self.set_state("tall")
+        else:
+            self.tab_chip.remove_css_class("active")
+            if self.is_fullscreen:
+                self.toggle_fullscreen(False)
+
+        self.update_tab_bar_visibility()
+        self.apply_size()
+        if self.active_tab:
+            self.active_tab.term.grab_focus()
+
+    def toggle_fullscreen(self, force=None):
+        if force is not None:
+            new_fs = force
+        else:
+            new_fs = not self.is_fullscreen
+
+        if new_fs == self.is_fullscreen:
+            return
+
+        self.is_fullscreen = new_fs
+
+        if self.is_fullscreen:
+            self.fs_btn.set_label("❐")
+            self.fs_btn.set_tooltip_text("Exit Fullscreen (F11)")
+            if not self.tabbed:
+                self.tabbed = True
+                self.tab_chip.add_css_class("active")
+            self.win.fullscreen()
+        else:
+            self.fs_btn.set_label("⛶")
+            self.fs_btn.set_tooltip_text("Toggle Fullscreen (F11)")
+            self.win.unfullscreen()
+
+        self.apply_size()
+        if self.active_tab:
+            self.active_tab.term.grab_focus()
+
+    # ---- Search bar ----
+    def build_search_bar(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        box.add_css_class("sgcon-search-box")
+        box.set_halign(Gtk.Align.END)
+        box.set_valign(Gtk.Align.START)
+        box.set_margin_end(190)
+        box.set_margin_top(8)
+
+        entry = self.search_entry = Gtk.Entry()
+        entry.add_css_class("sgcon-search-entry")
+        entry.set_placeholder_text("Find in terminal...")
+        entry.connect("changed", self.on_search_changed)
+
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect("key-pressed", self.on_search_key)
+        entry.add_controller(key_ctrl)
+        box.append(entry)
+
+        prev_btn = Gtk.Button(label="▲", tooltip_text="Find Previous (Shift+Enter)", focusable=False)
+        prev_btn.add_css_class("sgcon-search-btn")
+        prev_btn.connect("clicked", lambda *_: self.search_prev())
+        box.append(prev_btn)
+
+        next_btn = Gtk.Button(label="▼", tooltip_text="Find Next (Enter)", focusable=False)
+        next_btn.add_css_class("sgcon-search-btn")
+        next_btn.connect("clicked", lambda *_: self.search_next())
+        box.append(next_btn)
+
+        case_btn = self.search_case_btn = Gtk.Button(label="Aa", tooltip_text="Match Case", focusable=False)
+        case_btn.add_css_class("sgcon-search-btn")
+        case_btn.connect("clicked", self.toggle_search_case)
+        box.append(case_btn)
+
+        close_btn = Gtk.Button(label="×", tooltip_text="Close Search (Esc)", focusable=False)
+        close_btn.add_css_class("sgcon-search-btn")
+        close_btn.connect("clicked", lambda *_: self.toggle_search(False))
+        box.append(close_btn)
+
+        box.set_visible(False)
+        return box
+
+    def on_search_key(self, _ctrl, keyval, _code, state):
+        if keyval == Gdk.KEY_Escape:
+            self.toggle_search(False)
+            return True
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            if state & Gdk.ModifierType.SHIFT_MASK:
+                self.search_prev()
+            else:
+                self.search_next()
+            return True
+        return False
+
+    def on_search_changed(self, entry):
+        text = entry.get_text()
+        if not text:
+            if self.active_tab:
+                self.active_tab.term.search_set_regex(None, 0)
+            return
+        try:
+            flags = 0x00000400
+            if not self.search_case_sensitive:
+                flags |= 0x00000008
+            regex = Vte.Regex.new_for_search(re.escape(text), -1, flags)
+            if self.active_tab:
+                self.active_tab.term.search_set_regex(regex, 0)
+                self.active_tab.term.search_set_wrap_around(True)
+                self.active_tab.term.search_find_next()
+        except Exception:
+            pass
+
+    def search_prev(self):
+        if self.active_tab:
+            self.active_tab.term.search_find_previous()
+
+    def search_next(self):
+        if self.active_tab:
+            self.active_tab.term.search_find_next()
+
+    def toggle_search_case(self, *_):
+        self.search_case_sensitive = not self.search_case_sensitive
+        if self.search_case_sensitive:
+            self.search_case_btn.add_css_class("active")
+        else:
+            self.search_case_btn.remove_css_class("active")
+        self.on_search_changed(self.search_entry)
+
+    def toggle_search(self, force=None):
+        show = not self.search_box.get_visible() if force is None else force
+        self.search_box.set_visible(show)
+        if show:
+            self.search_entry.grab_focus()
+            self.search_entry.select_region(0, -1)
+            self.on_search_changed(self.search_entry)
+        else:
+            if self.active_tab:
+                self.active_tab.term.search_set_regex(None, 0)
+                self.active_tab.term.grab_focus()
+
+    # ---- Context menu ----
+    def show_context_menu(self, tab, x, y):
+        if self.popover:
+            self.popover.unparent()
+            self.popover = None
+
+        popover = Gtk.Popover()
+        popover.add_css_class("sgcon-popover")
+        popover.set_parent(tab.term)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+
+        def add_item(label, cb, sensitive=True):
+            b = Gtk.Button(label=label, focusable=False)
+            b.add_css_class("sgcon-menu-item")
+            b.set_sensitive(sensitive)
+            b.connect("clicked", lambda *_: (popover.popdown(), cb()))
+            box.append(b)
+            return b
+
+        def add_sep():
+            s = Gtk.Box()
+            s.add_css_class("sgcon-menu-sep")
+            box.append(s)
+
+        url = tab.term.check_hyperlink_at(x, y)
+        if not url:
+            m = tab.term.check_match_at(x, y)
+            if m and m[0]:
+                url = m[0]
+
+        if url:
+            add_item("🌐 Open Link", lambda: Gio.AppInfo.launch_default_for_uri(url, None))
+            add_item("📋 Copy Link Address", lambda: Gdk.Display.get_default().get_clipboard().set(url))
+            add_sep()
+
+        has_sel = tab.term.get_has_selection()
+        add_item("Copy (Ctrl+Shift+C)", lambda: tab.term.copy_clipboard_format(Vte.Format.TEXT), sensitive=has_sel)
+        add_item("Paste (Ctrl+Shift+V)", lambda: tab.term.paste_clipboard())
+        add_item("Select All (Ctrl+Shift+A)", lambda: tab.term.select_all())
+        add_sep()
+        add_item("Find in Terminal... (Ctrl+Shift+F)", self.toggle_search)
+        add_sep()
+        add_item("New Tab (Ctrl+Shift+T)", self.new_tab)
+        add_item("Close Tab (Ctrl+Shift+W)", lambda: self.close_tab(tab), sensitive=len(self.tabs) > 1)
+        add_sep()
+        add_item("Zoom In (Ctrl++)", lambda: tab.zoom(1.1))
+        add_item("Zoom Out (Ctrl+-)", lambda: tab.zoom(1.0 / 1.1))
+        add_item("Reset Zoom (Ctrl+0)", lambda: tab.term.set_font_scale(1.0))
+        add_sep()
+        fs_label = "Exit Fullscreen (F11)" if self.is_fullscreen else "Fullscreen (F11)"
+        add_item(fs_label, self.toggle_fullscreen)
+        tab_label = "Disable Tabbed Mode" if self.tabbed else "Enable Tabbed Mode"
+        add_item(tab_label, self.toggle_tabbed)
+        add_sep()
+        add_item("Clear Scrollback", lambda: tab.term.reset(True, True))
+
+        popover.set_child(box)
+
+        rect = Gdk.Rectangle()
+        rect.x = int(x); rect.y = int(y); rect.width = 1; rect.height = 1
+        popover.set_pointing_to(rect)
+        popover.popup()
+        self.popover = popover
+
+    def ring_bell(self):
+        snd = C.DATA_DIR / "sounds" / "hover.ogg"
+        if snd.exists():
+            try:
+                subprocess.Popen(["pw-play", str(snd)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                try:
+                    subprocess.Popen(["paplay", str(snd)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+
+    def open_settings(self, *_):
+        try:
+            Gio.Subprocess.new(["gnome-control-center"], Gio.SubprocessFlags.NONE)
+        except GLib.Error:
+            pass
+
+    # ---- Drawing ----
+    def draw_bar(self, _area, cr, w, h):
+        r = 6 if self.floating and not self.is_fullscreen else 0
+        cr.new_path()
+        if r:
+            cr.arc(w - r, r, r, -math.pi / 2, 0); cr.arc(w - r, h - r, r, 0, math.pi / 2)
+            cr.arc(r, h - r, r, math.pi / 2, math.pi); cr.arc(r, r, r, math.pi, 1.5 * math.pi)
+            cr.close_path()
+        else:
+            cr.rectangle(0, 0, w, h)
+        bg_alpha = 0.94 if self.is_fullscreen else 0.80
+        cr.set_source_rgba(8 / 255, 22 / 255, 20 / 255, bg_alpha)
+        cr.fill()
+        # White top line with magenta (above) / cyan (below) fringe
+        cr.set_source_rgba(0.91, 0.25, 0.56, 1); cr.rectangle(0, 0, w, 1); cr.fill()
+        cr.set_source_rgba(1, 1, 1, 1); cr.rectangle(0, 1, w, 3); cr.fill()
+        cr.set_source_rgba(0.21, 0.88, 0.90, 1); cr.rectangle(0, 4, w, 1); cr.fill()
+        if h < 80:
+            return
+        # Circuit decoration, bottom centre (640x26 from the demo)
+        cr.save()
+        cr.translate((w - 640) / 2, h - 32)
+        cr.set_line_width(1.4)
+        cr.set_source_rgba(1, 1, 1, 0.5)
+        for pts in (((0, 24), (160, 24), (176, 8), (270, 8), (286, 24), (354, 24), (370, 8), (464, 8), (480, 24), (640, 24)),):
+            cr.move_to(*pts[0])
+            for p in pts[1:]:
+                cr.line_to(*p)
+            cr.stroke()
+        cr.set_source_rgba(1, 1, 1, 0.25)
+        for pts in (((200, 24), (214, 12), (264, 12)), ((380, 24), (394, 12), (444, 12)), ((60, 18), (140, 18)), ((500, 18), (600, 18))):
+            cr.move_to(*pts[0])
+            for p in pts[1:]:
+                cr.line_to(*p)
+            cr.stroke()
+        cr.restore()
+
+    # ---- Geometry & Layout ----
+    def monitor_width(self):
+        display = Gdk.Display.get_default()
+        mons = display.get_monitors()
+        surface = self.win.get_surface()
+        mon = display.get_monitor_at_surface(surface) if surface else None
+        if mon is None and mons.get_n_items():
+            mon = mons.get_item(0)
+        return mon.get_geometry().width if mon else 1280
+
+    def monitor_height(self):
+        display = Gdk.Display.get_default()
+        mons = display.get_monitors()
+        surface = self.win.get_surface()
+        mon = display.get_monitor_at_surface(surface) if surface else None
+        if mon is None and mons.get_n_items():
+            mon = mons.get_item(0)
+        return mon.get_geometry().height if mon else 720
+
+    def apply_size(self):
+        small = (self.height <= SMALL_H + 4) and not self.is_fullscreen
+        self.stack.set_visible(not small)
+        self.update_tab_bar_visibility()
+
+        if self.is_fullscreen:
+            self.auto.set_visible(False)
+            self.grip.set_visible(False)
+            title = "sg-console:tabbed:fullscreen" if self.tabbed else "sg-console:fullscreen"
+            self.win.set_title(title)
+            left, right, top, bottom = 24, 24, 46, 42
+            self.stack.set_margin_start(left); self.stack.set_margin_end(right)
+            self.stack.set_margin_top(top); self.stack.set_margin_bottom(bottom)
+        else:
+            self.auto.set_visible(not small and not self.floating)
+            self.grip.set_visible(True)
+            self.grip.set_cursor(Gdk.Cursor.new_from_name("grab" if self.floating else "ns-resize"))
+
+            if self.floating:
+                left, right, top, bottom = 16, 16, 44 if self.tabbed else 40, 46
+                w = FLOAT_W
+                h = max(FLOAT_H, self.height) if self.state != "normal" else FLOAT_H
+                title = "sg-console:tabbed:float" if self.tabbed else "sg-console:float"
+            else:
+                if self.tabbed:
+                    left, right, top, bottom = 32, 32, 44, 40
+                else:
+                    left, right, top, bottom = 210, 200, 16, 40
+                w, h = self.monitor_width(), self.height
+                title = "sg-console:tabbed:dock" if self.tabbed else "sg-console:dock"
+
+            self.stack.set_margin_start(left); self.stack.set_margin_end(right)
+            self.stack.set_margin_top(top); self.stack.set_margin_bottom(bottom)
+            self.win.set_title(title)
+            self.win.set_default_size(w, h)
+
+        self.win.queue_draw()
+
+    def set_state(self, state):
+        self.state = state
+        self.height = {"tall": self.h_tall, "small": SMALL_H}.get(state, self.h_normal)
+        self.apply_size()
+
+    def grow(self, *_):
+        self.set_state("normal" if self.state == "small" else "tall")
+
+    def shrink(self, *_):
+        self.set_state("normal" if self.state == "tall" else "small")
+
+    def set_float(self, floating):
+        self.floating = floating
+        if self.state == "small":
+            self.state, self.height = "normal", self.h_normal
+        self.apply_size()
+
+    def set_shown(self, shown):
+        if getattr(self, "_closing", 0):
+            GLib.source_remove(self._closing)
+            self._closing = 0
+        if shown:
+            if self.state == "small" and not self.is_fullscreen:
+                self.set_state("normal")
+            self.apply_size()
+            self.win.present()
+            if self.active_tab:
+                self.active_tab.term.grab_focus()
+        elif self.win.get_visible():
+            # the shell extension slides the bar out when it sees this title; then hide for real
+            if self.is_fullscreen or self.floating:
+                self.win.set_visible(False)
+                return
+            self.win.set_title((self.win.get_title() or "sg-console:dock") + ":closing")
+            self._closing = GLib.timeout_add(280, self._finish_close)
+
+    def _finish_close(self):
+        self._closing = 0
+        self.win.set_visible(False)
+        return False
+
+    def on_drag_begin(self, gesture, _x, _y):
+        if self.floating:
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            dev = gesture.get_device()
+            ok, sx, sy = gesture.get_start_point()
+            toplevel = self.win.get_surface()
+            if ok and toplevel:
+                toplevel.begin_move(dev, gesture.get_current_button(), sx, sy, gesture.get_current_event_time())
+            return
+        self._h0 = self.height
+
+    def on_drag_update(self, _gesture, _dx, dy):
+        if self.floating or self.is_fullscreen:
+            return
+        mon_h = self.monitor_height()
+        max_h = max(MAX_H, mon_h - 60) if self.tabbed else MAX_H
+        self.height = int(max(MIN_H, min(max_h, self.height - dy)))
+        self.state = "custom"
+        self.apply_size()
+
+
+if __name__ == "__main__":
+    sys.exit(Console().run(sys.argv))

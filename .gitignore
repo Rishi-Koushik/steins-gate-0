@@ -1,0 +1,9 @@
+plymouth-theme/
+*.zip
+__pycache__/
+*.pyc
+# Amadeus secrets and personal data never belong in the repo
+amadeus/keys
+keys
+memory.json
+settings.json

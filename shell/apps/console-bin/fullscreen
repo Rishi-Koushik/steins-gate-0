@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+sg-console --fullscreen; exec "$(dirname "$0")/sg-say" "Fullscreen toggled."

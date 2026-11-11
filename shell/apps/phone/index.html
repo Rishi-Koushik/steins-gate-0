@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone Trigger</title>
+<style>
+@font-face{font-family:"Archivo Black";src:url("../fonts/ArchivoBlack-Regular.ttf")}
+:root{--orange:#f7a600;--sans:"Adwaita Sans","Inter","DejaVu Sans",sans-serif;--s:1}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:transparent;overflow:hidden;font-family:var(--sans);user-select:none;color:#fff}
+/* stage = the right-hand column of the 1280x720 reference canvas, scaled by --s */
+#stage{position:absolute;right:0;top:0;width:405px;height:720px;transform-origin:top right;transform:scale(var(--s))}
+#phoneWrap{position:absolute;right:51px;top:0;width:300px;height:720px;transform-origin:top right;transform:scale(1.18)}
+#phone{position:absolute;left:0;top:10px;width:300px;transform:translateY(1100px)}
+#phone.open{transform:none;animation:phoneIn 1.2s cubic-bezier(.2,.75,.25,1) both}
+#phone.closing{animation:phoneOut .45s cubic-bezier(.6,0,.9,.4) both}
+@keyframes phoneIn{0%{transform:perspective(1400px) translateY(1100px) rotateX(0deg)}55%{transform:perspective(1400px) translateY(150px) rotateX(-360deg)}100%{transform:perspective(1400px) translateY(0) rotateX(-360deg)}}
+@keyframes phoneOut{0%{transform:translateY(0)}100%{transform:translateY(1100px)}}
+.truss{display:block}
+.body{background:#f45b5e;border:2px solid #111;border-radius:12px 12px 0 0;padding:6px 10px 0;margin-top:-2px;position:relative}
+.top{height:16px;position:relative}
+.top .cam{position:absolute;left:12px;top:3px;width:11px;height:11px;border-radius:50%;background:#1b1b1f;box-shadow:inset 0 0 0 2px #555}
+.top .spk{position:absolute;left:46%;top:5px;width:46px;height:7px;border-radius:4px;background:#14141a;box-shadow:0 -1px 0 #ff9a9c}
+.frame{background:#101214;border:2px solid #000;border-radius:12px 12px 0 0;padding:6px 8px 0;overflow:hidden}
+.status{height:22px;display:flex;justify-content:space-between;align-items:center;padding:0 4px;background:#171d1c;font:700 11px var(--sans)}
+.status .r{display:flex;gap:8px;align-items:center}
+.status svg.off{opacity:.25}
+.screen{position:relative;height:290px;background:#dcefdd;overflow:hidden;color:#111}
+#pscr{position:absolute;inset:0;overflow:auto}#pscr::-webkit-scrollbar{width:0}
+#pscr.home{background:linear-gradient(160deg,#2f72e6,#0c3ca4 55%,#0a2c86);overflow:hidden}
+.strip{height:36px;margin:0 -8px;background:linear-gradient(#a2a8af,#737a82);display:flex;align-items:center;justify-content:center;gap:14px;color:#2a3138;font-weight:900;letter-spacing:.25em}
+.strip .lens{width:15px;height:15px;border-radius:50%;background:#2f7fc8;box-shadow:0 0 0 3px #1b1f24,0 0 6px #4af}
+.keys{margin:0 -10px;display:grid;grid-template-columns:repeat(4,1fr);background:#2a2b30;border-top:2px solid #111}
+.keys div{height:40px;border-right:2px solid #111;background:#4a4c54;color:#c8cad0;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.keys div:hover{background:#6a6d78;color:#fff}
+.bot{background:#26282d;border:2px solid #111;border-top:0;border-radius:0 0 40px 40px;height:140px;position:relative}
+.bot svg{position:absolute;left:50%;top:14px;transform:translateX(-50%)}
+.mh{position:absolute;left:8px;top:2px;font:400 54px/1 "Archivo Black","Arial Black",sans-serif;letter-spacing:-.045em;color:rgba(160,185,215,.88)}
+.emc{position:absolute;left:4px;top:88px;font:900 70px/1 var(--sans);color:rgba(45,215,240,.30);letter-spacing:-.07em}
+.circ{position:absolute;inset:0}.circ path{fill:none;stroke:#2fe0f0;stroke-width:3;opacity:.85;stroke-linejoin:round}
+.mgrid{position:absolute;left:0;right:0;top:84px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px 0;padding:0 4px}
+.tile{text-align:center;cursor:pointer;color:#fff;font:600 13px var(--sans);text-shadow:0 1px 2px #0008}
+.tile .ic{width:54px;height:54px;border-radius:50%;margin:0 auto 3px;display:flex;align-items:center;justify-content:center;background:radial-gradient(#3b4b4a,#1a2424);box-shadow:inset 0 0 0 3px #8a9696,0 3px 5px #0006;transition:.12s}
+.tile:hover .ic{box-shadow:inset 0 0 0 3px #f7a600,0 3px 6px #0006;transform:scale(1.06)}
+.head{background:#2a62b4;font:700 19px var(--sans);padding:4px 8px;display:flex;align-items:center;gap:8px;color:#fff}
+.head::before{content:"";width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 4px #2a62b4,0 0 0 1px #fff;flex:none}
+.head .back{margin-left:auto;font-size:13px;cursor:pointer;opacity:.85}
+.prow{padding:5px 10px;font:15px var(--sans);color:#111;background:#e9f4ea;border-bottom:1px solid #cfd8d0;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow.sel,.prow:hover{background:var(--orange)}
+.prow.note{cursor:default;font-size:12px;color:#445;white-space:normal}.prow.note:hover{background:#e9f4ea}
+.prow .st{float:right;font-size:12px;opacity:.75;max-width:60%;overflow:hidden;text-overflow:ellipsis}
+.slr{display:flex;align-items:center;gap:6px;padding:5px 10px;background:#e9f4ea;color:#111;font-size:14px;border-bottom:1px solid #cfd8d0}
+.slr input{flex:1;accent-color:#0b64c0}
+.mrow{display:flex;align-items:stretch;border-bottom:1px solid #333;background:#e9f4ea}
+.mrow b{background:#e8761c;color:#fff;width:34px;font:800 15px var(--sans);display:flex;align-items:center;justify-content:center}
+.mrow input{flex:1;border:0;background:transparent;font:16px var(--sans);padding:3px 6px;outline:none;color:#111;min-width:0}
+#mbody{width:100%;height:150px;border:0;background:transparent;font:16px/1.25 var(--sans);padding:6px 8px;resize:none;outline:none;color:#111;user-select:text}
+.mbar{position:absolute;bottom:4px;left:6px;right:6px;display:flex;gap:5px;align-items:center}
+.phbtn{font:700 12px var(--sans);padding:3px 8px;background:linear-gradient(#2b8fe0,#0b64c0);color:#fff;border:0;cursor:pointer}
+.phbtn:hover{filter:brightness(1.2)}
+#mn{font-size:11px;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ---- Amadeus ---- */
+.tile .ic.kface{background:#e4ece8 url("../amadeus/emotions/neutral.webp") -28px -12px/110px auto no-repeat}
+.tile .ic svg{max-width:36px;max-height:36px}
+#pscr.am{background:#0b1512;color:#d8efe6;overflow:hidden;display:flex;flex-direction:column}
+.amtop{position:relative;height:104px;flex:none;border-bottom:1px solid #2a6a58;overflow:hidden;
+ background:linear-gradient(#2fe0a01c 1px,transparent 1px) 0 0/12px 12px,linear-gradient(90deg,#2fe0a01c 1px,transparent 1px) 0 0/12px 12px,linear-gradient(#123a31,#0b1512)}
+#amimg{position:absolute;left:2px;top:3px;width:150px;pointer-events:none}
+.aminfo{position:absolute;left:152px;right:4px;top:6px;font-size:11px;line-height:1.3;color:#bfe9da}
+.aminfo b{display:block;font:400 17px/1.1 "Archivo Black","Arial Black",sans-serif;color:#7ff0c8;letter-spacing:.03em}
+#amemo{display:inline-block;margin-top:5px;padding:1px 6px;border:1px solid var(--orange);color:var(--orange);font:700 10px var(--sans);text-transform:uppercase;letter-spacing:.08em}
+#amst{display:block;margin-top:4px;color:#9cc;font-size:10px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.amnav{position:absolute;right:5px;bottom:3px;display:flex;gap:10px;font-size:12px;color:#bfe}
+.amnav span{cursor:pointer}.amnav span:hover{color:var(--orange)}
+#amlog{flex:1;overflow:auto;padding:3px 6px;font-size:12.5px;line-height:1.3;user-select:text}
+#amlog::-webkit-scrollbar{width:3px}#amlog::-webkit-scrollbar-thumb{background:#2a6a58}
+.amm{margin:3px 0;padding:3px 6px;border-radius:6px;max-width:94%;width:fit-content;white-space:pre-wrap;word-break:break-word}
+.amm.user{margin-left:auto;background:#1f5fa8;color:#fff}
+.amm.ai{background:#16332b;border-left:2px solid #7ff0c8}
+.amm.sys{background:#3a1c1c;color:#fbb;font-size:11px}
+.amm pre,.amcf pre{font:10.5px/1.25 "Adwaita Mono",monospace;background:#0009;padding:3px 4px;margin:2px 0;overflow:auto;white-space:pre}
+.amcf{background:#2b2410;border:1px solid var(--orange);padding:4px 6px;margin:4px 0;font-size:11px;color:#fe9}
+.amcf pre{max-height:92px;color:#ccc}.amcf .add{color:#8f8}.amcf .del{color:#f99}
+.amcf .phbtn{margin:3px 6px 0 0}
+.amin{flex:none;display:flex;gap:4px;padding:3px 4px;background:#10201c;border-top:1px solid #2a6a58}
+.amin input{flex:1;min-width:0;background:#06100d;border:1px solid #2a6a58;color:#e8fff6;font:13px var(--sans);padding:3px 5px;outline:none;user-select:text}
+.amin .phbtn:disabled{filter:grayscale(1);opacity:.6}
+</style>
+</head>
+<body>
+<div id="stage"><div id="phoneWrap"><div id="phone"></div></div></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let actx;function beep(f=900,d=.05,v=.03,t='square'){try{actx=actx||new AudioContext();const o=actx.createOscillator(),g=actx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(actx.destination);o.start();g.gain.exponentialRampToValueAtTime(1e-4,actx.currentTime+d);o.stop(actx.currentTime+d)}catch(e){}}
+
+/* ---- native bridge (sg-phone); a mock keeps the page usable in a plain browser ---- */
+const mock={wifi:true,ssid:'(demo)',bt:false,air:false,eco:false,bright:70,vol:60,battery:80,contacts:['Mayuri','Daru'],drafts:[],a11y:{}};
+async function call(cmd,args={}){
+  const h=window.webkit?.messageHandlers?.sg;
+  if(!h){if(cmd==='state')return mock;if(cmd==='set'){mock[args.key]=args.value;return mock}return {}}
+  try{return JSON.parse(await h.postMessage(JSON.stringify({cmd,...args})))}catch(e){return {error:String(e)}}
+}
+let st=mock;
+async function refresh(){const r=await call('state');if(r&&!r.error)st=r;paintStatus();return st}
+async function set(key,value){const r=await call('set',{key,value});if(r&&!r.error)st=r;paintStatus()}
+
+const I={
+ sig:'<svg id="isig" width="24" height="16" viewBox="0 0 24 16"><g fill="#fff"><circle cx="4" cy="4" r="2.3"/><rect x="3" y="6" width="2" height="9"/><rect x="10" y="10" width="3" height="5"/><rect x="14.5" y="6" width="3" height="9"/><rect x="19" y="2" width="3" height="13"/></g></svg>',
+ mail:'<svg id="imail" width="26" height="16" viewBox="0 0 26 16" fill="none" stroke="#fff" stroke-width="1.6"><rect x="1.5" y="1.5" width="23" height="13"/><path d="M2 3l11 7 11-7"/></svg>',
+ bat:'<svg width="30" height="16" viewBox="0 0 30 16"><rect x="1" y="1.5" width="26" height="13" fill="none" stroke="#fff" stroke-width="1.6"/><g fill="#fff" id="ibat"><rect x="4" y="4" width="4" height="8"/><rect x="9.5" y="4" width="4" height="8"/><rect x="15" y="4" width="4" height="8"/><rect x="20.5" y="4" width="4" height="8"/></g></svg>',
+ env:'<svg width="38" height="30" viewBox="0 0 38 30"><rect x="3" y="4" width="32" height="22" rx="3" fill="#e8f2f0"/><path d="M4 6l15 11L34 6" fill="none" stroke="#2a3a3a" stroke-width="2.4"/></svg>',
+ person:'<svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#ee5b3f"/><ellipse cx="20" cy="17" rx="8" ry="9" fill="#f6efe9"/><path d="M6 35c3-9 25-9 28 0" fill="#f6efe9"/></svg>',
+ net:'<svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="#f2f6f6" stroke-width="4.5" stroke-linecap="round"><path d="M8 12h14a6 6 0 010 9H12M12 21h12a6 6 0 010 8H8"/></svg>',
+ set:'<svg width="38" height="38" viewBox="0 0 38 38" fill="#f2f6f6"><path d="M28 5a9 9 0 00-8 12L6 31a3 3 0 004 4l14-14a9 9 0 0012-8l-6 5-5-1-1-5z"/></svg>',
+ book:'<svg width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 4C9 2 5 2 1 3v14c4-1 8-1 12 1 4-2 8-2 12-1V3c-4-1-8-1-12 1zM13 4v14"/></svg>',
+ cam:'<svg width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1.5" y="3" width="23" height="15" rx="2"/><circle cx="13" cy="10.5" r="4.5"/></svg>',
+ gear:'<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="3.4"/><path d="M11 1.5v3M11 17.5v3M1.5 11h3M17.5 11h3M4.3 4.3l2.1 2.1M15.6 15.6l2.1 2.1M17.7 4.3l-2.1 2.1M6.4 15.6l-2.1 2.1"/></svg>',
+ env2:'<svg width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1.5" y="1.5" width="23" height="15"/><path d="M2 3l11 8 11-8"/></svg>'};
+
+const ph=$('#phone');
+ph.innerHTML=`
+ <svg class="truss" viewBox="0 0 300 62" width="300" height="62"><g stroke="#1b2352" stroke-width="9" fill="none" stroke-linejoin="miter"><path d="M12 62V9H288V62"/><path d="M12 62L58 14 104 62 150 14 196 62 242 14 288 62"/></g><path d="M12 62V9H288V62" stroke="#c9d0ff" stroke-opacity=".35" stroke-width="1.5" fill="none"/></svg>
+ <div class="body">
+  <div class="top"><i class="cam"></i><i class="spk"></i></div>
+  <div class="frame">
+   <div class="status">${I.sig}<span id="pclk"></span><span class="r">${I.mail}${I.bat}</span></div>
+   <div class="screen"><div id="pscr"></div></div>
+   <div class="strip"><span>– –</span><i class="lens"></i><span>– –</span></div>
+  </div>
+  <div class="keys"><div data-k="mail" title="Mail">${I.env2}</div><div data-k="set" title="Settings">${I.gear}</div><div data-k="book" title="Contacts">${I.book}</div><div data-k="menu" title="Menu">${I.cam}</div></div>
+ </div>
+ <div class="bot"><svg width="230" height="112" viewBox="0 0 230 112" fill="none" stroke="#8a8f99" stroke-width="2"><path d="M70 4h90l-14 36H84z"/><path d="M6 46l66 6v30L6 66z"/><path d="M224 46l-66 6v30l66-16z"/><rect x="88" y="58" width="54" height="30" rx="8"/><path d="M6 78h20M204 78h20"/></svg></div>`;
+const pscr=$('#pscr');
+const sc=c=>{pscr.className=c||''};
+const head=(t,back)=>`<div class="head">${esc(t)}${back?`<span class="back" data-back="${back}">‹ back</span>`:''}</div>`;
+function wire(){pscr.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{beep(700,.04);views[b.dataset.back]()})}
+
+function paintStatus(){
+  const d=new Date();$('#pclk').textContent=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false});
+  $('#isig').classList.toggle('off',!st.wifi||st.air);
+  $('#imail').classList.toggle('off',!(st.drafts&&st.drafts.length));
+  const n=Math.max(0,Math.min(4,Math.ceil((st.battery??100)/25)));
+  $$('#ibat rect').forEach((r,i)=>r.style.opacity=i<n?1:.15);
+}
+setInterval(paintStatus,5000);
+
+const views={};
+views.home=function(){sc('home');
+  pscr.innerHTML=`<div class="mh">MENU</div><div class="emc">E=mc²</div>
+   <svg class="circ" viewBox="0 0 270 290"><path d="M150 0v34l28 28v60l22 22v70l-18 18v58"/><path d="M200 0v26l30 30v90l-24 24v120"/><path d="M262 40v140l-20 20v90"/><path d="M120 222h36l16 16h40"/></svg>
+   <div class="mgrid">
+    <div class="tile" data-a="mail"><div class="ic">${I.env}</div>MAIL</div>
+    <div class="tile" data-a="contacts"><div class="ic">${I.person}</div>Contacts</div>
+    <div class="tile" data-a="net"><div class="ic">${I.net}</div>Network</div>
+    <div class="tile" data-a="set"><div class="ic">${I.set}</div>Settings</div>
+    <div class="tile" data-a="amadeus"><div class="ic kface"></div>Amadeus</div></div>`;
+  pscr.querySelectorAll('[data-a]').forEach(t=>t.onclick=()=>{beep(1300,.04);views[t.dataset.a]()})};
+
+views.net=async function(){sc('');await refresh();
+  const T=(k,l,x)=>`<div class="prow" data-t="${k}">${l}<span class="st">${st[k]?'ON':'OFF'}${x?' · '+esc(x):''}</span></div>`;
+  pscr.innerHTML=head('Network','home')+T('wifi','Wi-Fi',st.wifi&&st.ssid?st.ssid:'')+T('bt','Bluetooth')+T('air','Airplane mode')+
+   `<div class="prow" data-w="1">WhatsApp ›</div><div class="prow" data-n="1">Network settings ›</div>`;
+  pscr.querySelectorAll('[data-t]').forEach(r=>r.onclick=async()=>{beep(1000,.04);await set(r.dataset.t,!st[r.dataset.t]);setTimeout(()=>{if(pscr.querySelector('[data-t]'))views.net()},900);views.net()});
+  pscr.querySelector('[data-w]').onclick=()=>{beep(1300,.04);call('whatsapp')};
+  pscr.querySelector('[data-n]').onclick=()=>call('open',{what:'wifi'});wire()};
+
+views.set=async function(){sc('');await refresh();
+  pscr.innerHTML=head('Settings','home')+`<div class="prow" data-e="1">Energy saver<span class="st">${st.eco?'ON':'OFF'}</span></div>
+   <div class="slr">☀<input type="range" id="rb" min="1" max="100" value="${st.bright??50}" ${st.bright==null?'disabled':''}></div>
+   <div class="slr">🔊<input type="range" id="rv" min="0" max="100" value="${st.vol??50}"></div>
+   <div class="prow" data-v="a11y">Accessibility ›</div><div class="prow" data-v="studio">Studio effects ›</div>`;
+  pscr.querySelector('[data-e]').onclick=async()=>{beep(1000,.04);await set('eco',!st.eco);views.set()};
+  $('#rb').oninput=e=>set('bright',+e.target.value);
+  $('#rv').oninput=e=>set('vol',+e.target.value);
+  pscr.querySelectorAll('[data-v]').forEach(r=>r.onclick=()=>{beep(1300,.04);views[r.dataset.v]()});wire()};
+
+const A11Y=[['large_text','Large text'],['high_contrast','High contrast'],['reduce_motion','Reduce motion'],['screen_reader','Screen reader'],['magnifier','Zoom']];
+views.a11y=async function(){sc('');await refresh();const a=st.a11y||{};
+  pscr.innerHTML=head('Accessibility','set')+A11Y.map(([k,l])=>`<div class="prow" data-a="${k}">${l}<span class="st">${a[k]?'ON':'OFF'}</span></div>`).join('')+`<div class="prow" data-o="1">All accessibility settings ›</div>`;
+  pscr.querySelectorAll('[data-a]').forEach(r=>r.onclick=async()=>{beep(1000,.04);await set('a11y.'+r.dataset.a,!a[r.dataset.a]);views.a11y()});
+  pscr.querySelector('[data-o]').onclick=()=>call('open',{what:'universal-access'});wire()};
+views.studio=function(){sc('');pscr.innerHTML=head('Studio effects','set')+`<div class="prow note">Studio effects (camera blur, eye contact, voice focus) are a Windows feature and have no GNOME equivalent on this machine.</div>`;wire()};
+
+views.contacts=async function(){sc('');await refresh();const cs=st.contacts||[];
+  pscr.innerHTML=head('Contact list','home')+(cs.length?cs.map((c,i)=>`<div class="prow ${i?'':'sel'}" data-i="${i}">${esc(c.name??c)}</div>`).join(''):'<div class="prow note">No contacts. Add them under [phone] contacts in ~/.config/sg-shell/config.toml</div>');
+  pscr.querySelectorAll('[data-i]').forEach(r=>r.onclick=()=>{beep(1300,.04);views.contact(cs[r.dataset.i])});wire()};
+views.contact=function(c){sc('');const name=c.name??c;
+  pscr.innerHTML=head(name,'contacts')+`<div class="prow" data-m="1">Send mail${c.email?`<span class="st">${esc(c.email)}</span>`:''}</div>
+   <div class="prow" data-w="1">WhatsApp${c.phone?`<span class="st">${esc(c.phone)}</span>`:''}</div>
+   ${c.email||c.phone?'':'<div class="prow note">Tip: write contacts as "Name &lt;mail@example.org&gt; +441234…" in config.toml to pre-fill mail and WhatsApp.</div>'}`;
+  pscr.querySelector('[data-m]').onclick=()=>views.mail({to:c.email||name});
+  pscr.querySelector('[data-w]').onclick=()=>call('whatsapp',{phone:c.phone||''});wire()};
+
+views.mail=async function(d={}){sc('');await refresh();
+  pscr.innerHTML=head('Send Mail','home')+`<div class="mrow"><b>To</b><input id="mt" placeholder="recipient" value="${esc(d.to)}"></div><div class="mrow"><b>Sub</b><input id="ms" placeholder="subject" value="${esc(d.subject)}"></div>
+   <textarea id="mbody" placeholder="Write your mail…">${esc(d.body)}</textarea>
+   <div class="mbar"><button class="phbtn" id="sv">Save draft</button><button class="phbtn" id="sd">Send</button><button class="phbtn" id="dl">Drafts (${(st.drafts||[]).length})</button><span id="mn"></span></div>`;
+  const cur=()=>({to:$('#mt').value,subject:$('#ms').value,body:$('#mbody').value,id:d.id||''});
+  $('#sv').onclick=async()=>{const r=await call('draft_save',cur());d.id=r.id||d.id;beep(900,.07);await refresh();$('#dl').textContent=`Drafts (${st.drafts.length})`;$('#mn').textContent=r.error?'save failed':'saved'};
+  $('#sd').onclick=async()=>{const r=await call('mail_send',cur());beep(1200,.08);$('#mn').textContent=r.error?r.error:'handed to mail app'};
+  $('#dl').onclick=()=>{beep(1300,.04);views.drafts()};wire()};
+views.drafts=async function(){sc('');await refresh();const ds=st.drafts||[];
+  pscr.innerHTML=head('Drafts','mail')+(ds.length?ds.map((d,i)=>`<div class="prow" data-i="${i}">${esc(d.subject||'(no subject)')}<span class="st">${esc(d.to)}</span></div>`).join(''):'<div class="prow note">No drafts yet.</div>')+
+   (ds.length?'<div class="prow note">Click a draft to edit it · right-click deletes it.</div>':'');
+  pscr.querySelectorAll('[data-i]').forEach(r=>{const d=ds[r.dataset.i];r.onclick=async()=>{const full=await call('draft_load',{id:d.id});views.mail(full.error?d:full)};
+    r.oncontextmenu=async e=>{e.preventDefault();await call('draft_delete',{id:d.id});beep(500,.05);views.drafts()}});wire()};
+
+/* ---- Amadeus: Makise Kurisu. The native side (apps/amadeus) thinks; this only draws. ---- */
+const am={log:[],images:{},pictures:[],emotion:'neutral',picture:'neutral',status:'',busy:false,keys:0,pending:null,facts:[],mode:'ask',model:''};
+const AMMODE={ask:'ask before changing','allow':'change freely','read-only':'read only',off:'no file access'};
+async function amLoad(){const r=await call('amadeus_state');if(r&&!r.error)Object.assign(am,r);return r}
+const amFmt=t=>esc(t).replace(/```\w*\n?([\s\S]*?)```/g,(m,c)=>`<pre>${c.replace(/\n$/,'')}</pre>`);
+function amPaint(){const log=$('#amlog');if(!log)return;
+  const img=$('#amimg'),src=am.images[am.picture]||am.images.neutral||'../amadeus/emotions/neutral.webp';
+  if(img.getAttribute('src')!==src)img.src=src;
+  $('#amemo').textContent=am.emotion;
+  $('#amst').textContent=am.busy?(am.status||'thinking')+' …':'';
+  let h=am.log.map(m=>`<div class="amm ${m.role==='ai'?'ai':m.role==='user'?'user':'sys'}">${amFmt(m.text)}</div>`).join('');
+  if(!am.keys)h+=`<div class="amm sys">I need a Google AI Studio API key before I can think. Get a free one at aistudio.google.com/apikey and paste it under ⚙.</div>`;
+  else if(!am.log.length)h+=`<div class="amm sys" style="background:#16332b;color:#9cc">Connected. Say something — or ask me to look at a file.</div>`;
+  const p=am.pending;
+  if(p)h+=`<div class="amcf"><b>${p.new?'Create':'Change'} ${esc(p.path)}</b> (+${p.plus} −${p.minus})${p.reason?'<br>'+esc(p.reason):''}
+    <pre>${esc(p.diff).split('\n').map(l=>`<span class="${l[0]==='+'?'add':l[0]==='-'?'del':''}">${l}</span>`).join('\n')}</pre>
+    <button class="phbtn" data-ok="1">Allow</button><button class="phbtn" data-ok="">Refuse</button></div>`;
+  log.innerHTML=h;log.scrollTop=log.scrollHeight;
+  log.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{beep(b.dataset.ok?1200:500,.06);const r=await call('amadeus_confirm',{id:p.id,allow:!!b.dataset.ok});if(r&&!r.error)Object.assign(am,r);amPaint()});
+  $('#amgo').disabled=am.busy}
+async function amSend(){const i=$('#amtx'),t=i.value.trim();if(!t||am.busy)return;beep(1300,.04);
+  const r=await call('amadeus_send',{text:t});
+  if(r.error)am.log.push({role:'sys',text:r.error==='no API key'?'No API key yet — add one under ⚙.':r.error});else{i.value='';Object.assign(am,r)}
+  amPaint()}
+views.amadeus=async function(){sc('am');
+  pscr.innerHTML=`<div class="amtop"><img id="amimg" alt=""><div class="aminfo"><b>AMADEUS</b>Makise Kurisu<br><span id="amemo">neutral</span><span id="amst"></span></div>
+    <div class="amnav"><span data-set="1" title="Amadeus settings">⚙</span><span data-back="home">‹ back</span></div></div>
+   <div id="amlog"></div><div class="amin"><input id="amtx" placeholder="Talk to Amadeus…" autocomplete="off"><button class="phbtn" id="amgo">Send</button></div>`;
+  wire();pscr.querySelector('[data-set]').onclick=()=>{beep(1300,.04);views.amset()};
+  $('#amgo').onclick=amSend;$('#amtx').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();amSend()}};
+  amPaint();await amLoad();amPaint();$('#amtx')?.focus()};
+views.amset=async function(){sc('');await amLoad();
+  pscr.innerHTML=head('Amadeus','amadeus')+`<div class="prow note">Thinking: ${esc(am.model)} · ${am.keys} API key${am.keys===1?'':'s'}</div>
+   <div class="mrow"><b>Key</b><input id="amkey" type="password" placeholder="paste API key, Enter"></div>
+   <div class="prow" data-x="mode">File access<span class="st">${AMMODE[am.mode]||am.mode}</span></div>
+   <div class="prow" data-x="mem">Memory ›<span class="st">${am.facts.length} note${am.facts.length===1?'':'s'}</span></div>
+   <div class="prow" data-x="clear">Clear conversation</div>
+   <div class="prow" data-x="keys">Remove all API keys</div>
+   <div class="prow note">Faces: ${esc(am.pictures.join(', '))}. Add more as NAME.webp/png in ${esc(am.emotions_dir||'')} (${esc((am.emotions||[]).join(', '))}).<br>Personality: ${esc(am.personality_file||'')}</div>`;
+  $('#amkey').onkeydown=async e=>{if(e.key!=='Enter')return;const r=await call('amadeus_key_add',{key:e.target.value});beep(r.error?400:1200,.07);if(r.error){e.target.value='';e.target.placeholder=r.error}else views.amset()};
+  const X={mode:'amadeus_mode',clear:'amadeus_clear',keys:'amadeus_keys_clear'};
+  pscr.querySelectorAll('[data-x]').forEach(r=>r.onclick=async()=>{beep(1000,.04);if(r.dataset.x==='mem')return views.ammem();await call(X[r.dataset.x]);views.amset()});wire()};
+views.ammem=async function(){sc('');await amLoad();
+  pscr.innerHTML=head('Memory','amset')+(am.facts.length?am.facts.map(f=>`<div class="prow" style="white-space:normal;font-size:13px" data-f="${esc(f.id)}">${esc(f.text)}</div>`).join('')+'<div class="prow note">What she chose to remember · right-click a note to make her forget it.</div>':'<div class="prow note">Nothing remembered yet. Tell her something worth keeping.</div>');
+  pscr.querySelectorAll('[data-f]').forEach(r=>r.oncontextmenu=async e=>{e.preventDefault();await call('amadeus_forget',{id:r.dataset.f});beep(500,.05);views.ammem()});wire()};
+window.amadeusEvent=async function(ev){if(ev.type==='status'){am.status=ev.text;am.busy=true}else{await amLoad();if(ev.type==='done')beep(1100,.06)}amPaint()};
+
+ph.querySelectorAll('.keys div').forEach(d=>d.onclick=()=>{beep(1300,.04);({mail:views.mail,set:views.set,book:views.contacts,menu:views.home})[d.dataset.k]()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!['INPUT','TEXTAREA'].includes(e.target.tagName))call('hide')});
+document.addEventListener('contextmenu',e=>{if(!e.target.closest('.prow'))e.preventDefault()});
+
+/* called by sg-phone */
+window.phoneOpen=function(scale){if(scale)document.documentElement.style.setProperty('--s',scale);
+  ph.classList.remove('closing','open');void ph.offsetWidth;ph.classList.add('open');beep(1500,.08);views.home();refresh()};
+window.phoneClose=function(){ph.classList.remove('open');ph.classList.add('closing');beep(600,.08)};
+if(!window.webkit?.messageHandlers?.sg)window.phoneOpen(Math.min(innerHeight/720,2));
+</script>
+</body>
+</html>

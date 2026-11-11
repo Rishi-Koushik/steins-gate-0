@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Typewriter output, like the game's text bar.  usage: sg-say "text"
+text="$*"
+if [ ! -t 1 ]; then printf '%s\n' "$text"; exit 0; fi
+for ((i = 0; i < ${#text}; i++)); do printf '%s' "${text:i:1}"; sleep 0.012; done
+printf '\n'

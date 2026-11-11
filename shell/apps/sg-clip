@@ -1,0 +1,78 @@
+#!/usr/bin/python3 -I
+"""Fullscreen clip player: `sg-clip unlock` (lock → home movie) or `sg-clip boot`.
+Ctrl+Shift+Esc (or Esc) skips. Not part of any security boundary: the session is
+already unlocked when this runs."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gtk, Gdk, Gio, GLib
+
+import sg_common as C
+
+CLIPS = {"unlock": "unlock.webm", "boot": "boot.webm"}
+
+
+class Clip(Gtk.Application):
+    def __init__(self, clip):
+        super().__init__(application_id="local.amadeus.SgClip", flags=Gio.ApplicationFlags.NON_UNIQUE)
+        self.clip = clip
+
+    def do_activate(self):
+        css = Gtk.CssProvider()
+        css.load_from_string(
+            "window.sgclip{background:#000}"
+            ".skiphint{font:600 13px 'Adwaita Sans',sans-serif;letter-spacing:1px;color:#ddd;"
+            "background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);border-radius:14px;"
+            "padding:5px 12px;margin:0 18px 14px 0}")
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+        win = Gtk.ApplicationWindow(application=self, title="sg-clip", decorated=False)
+        win.add_css_class("sgclip")
+        self.win = win
+        self.media = Gtk.MediaFile.new_for_filename(C.media(CLIPS[self.clip]))
+        fit = C.cfg_get(C.load_config(), "lock", "fit", "contain")
+        pic = Gtk.Picture(paintable=self.media, can_shrink=True,
+                          content_fit=Gtk.ContentFit.COVER if fit == "cover" else Gtk.ContentFit.CONTAIN)
+        overlay = Gtk.Overlay(child=pic)
+        hint = Gtk.Label(label="Ctrl+Shift+Esc — skip", halign=Gtk.Align.END, valign=Gtk.Align.END)
+        hint.add_css_class("skiphint")
+        overlay.add_overlay(hint)
+        win.set_child(overlay)
+        win.set_cursor(Gdk.Cursor.new_from_name("none"))
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key)
+        win.add_controller(keys)
+
+        self.media.connect("notify::ended", lambda m, _p: m.get_ended() and self.finish())
+        self.media.connect("notify::error", lambda m, _p: m.get_error() and self.finish())
+        # never leave a black fullscreen window behind if playback stalls
+        GLib.timeout_add_seconds(75, self.finish)
+        win.fullscreen()
+        win.present()
+        self.media.play()
+
+    def on_key(self, _c, keyval, _code, _state):
+        if keyval == Gdk.KEY_Escape:
+            self.finish()
+            return True
+        return False
+
+    def finish(self):
+        if self.win:
+            self.media.pause()
+            self.win.destroy()
+            self.win = None
+        self.quit()
+        return False
+
+
+if __name__ == "__main__":
+    clip = sys.argv[1] if len(sys.argv) > 1 else "unlock"
+    if clip not in CLIPS:
+        sys.exit(f"usage: sg-clip [{'|'.join(CLIPS)}]")
+    Clip(clip).run([])

@@ -1,0 +1,20 @@
+.sg-date-badge {
+    background-color: #f4f4f4;
+    border-radius: 0 12px 12px 0;
+    padding: 2px 24px 2px 14px;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+.sg-date-badge-date {
+    font-family: Adwaita Sans, Inter, sans-serif;
+    font-weight: 800;
+    font-size: 38px;
+    color: #111;
+}
+.sg-date-badge-day {
+    font-family: Adwaita Sans, Inter, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: #111;
+    padding-left: 4px;
+    padding-bottom: 7px;
+}

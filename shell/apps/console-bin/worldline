@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "$(dirname "$0")/sg-say" "Divergence: 1.048596  (Steins;Gate)"

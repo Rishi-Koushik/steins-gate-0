@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Steins;Gate RE:BOOT
+Description=Opening seconds of the game's intro, played as frames (Plymouth has no video or audio).
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/steinsgate
+ScriptFile=/usr/share/plymouth/themes/steinsgate/steinsgate.script

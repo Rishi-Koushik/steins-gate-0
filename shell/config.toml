@@ -1,0 +1,89 @@
+# Steins;Gate RE:BOOT shell — user configuration
+# Installed to ~/.config/sg-shell/config.toml. Edit, then:
+#   - shortcuts / wallpaper:  re-run  ./install.sh --apply-settings
+#   - everything else is read when the lock screen / app next starts.
+
+[home]
+# Empty = the bundled Steins;Gate wallpaper. Any image path works.
+wallpaper = ""
+date_badge = true
+
+[shortcuts]
+# Alt+C console, Alt+P phone (as in the demo). console_alt is an optional second console key.
+# Super+P cannot be used: GNOME reserves it for display switching.
+console = "<Alt>c"
+console_alt = ""
+phone = "<Alt>p"
+# The keyboard's Copilot key also opens / closes the phone.
+copilot_key = true
+
+[lock]
+# false = keep GNOME's stock lock screen (also: press F12 on the lock screen at any time).
+enabled = true
+# "password" = type the account password on the nixie panel, Enter submits. Digits show on the tubes,
+#              other characters as a dot; a longer password shows its last four.
+# "none"     = no password on the lock screen: pick the save, the tubes spin, the session opens.
+#              The account password itself stays (sudo, text consoles). Anyone at the keyboard gets in.
+# "pin"      = account password IS a 4-digit PIN: digits show on the tubes, auto-submit after the 4th.
+auth_mode = "none"
+# false = no title menu (NEW GAME / CONTINUE …): the lock screen is only the nixie panel on black.
+# With auth_mode = "none" the tubes just spin to 1.048596 and the session opens.
+title_screen = false
+video = true
+music = true
+music_volume = 0.85
+sounds = true
+# Play the 54 s unlock movie after a successful unlock.
+unlock_movie = true
+# Boot clip (46 s) before the title screen: "manual" = at login and after the console `lock`
+# command / EXIT GAME, "always" = on every lock (idle too), "never".
+boot_clip = "manual"
+# Lock straight after login so the boot clip → title screen → nixie panel → unlock movie
+# run on every power-on, like the demo: "always", "autologin" (only when GDM auto-login
+# is on, so you never type the password twice), "never".
+on_login = "always"
+# The clips and title screen are 16:9. "contain" shows the whole picture, with black bars
+# above and below on a 16:10 panel; "cover" fills the screen and crops 5 % per side.
+fit = "contain"
+# Label shown on the save slot. Empty = the login name.
+display_name = ""
+
+[console]
+# Empty = your login shell.
+shell = ""
+height = 200
+tall_height = 480
+font = "Adwaita Mono 13"
+
+[phone]
+contacts = ["Mayuri", "Daru", "Lukako", "Faris", "PhoneWave"]
+whatsapp_user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
+[amadeus]
+# Amadeus (phone → Amadeus): Makise Kurisu, three sections — personality, memory, thinking.
+# What she calls you. Empty = [lock] display_name, else the login name.
+user_name = ""
+# Files: "ask" = she may read, every change needs your OK on the phone (originals are backed up
+# under ~/.local/share/sg-shell/amadeus/backups); "allow" = change without asking;
+# "read-only"; "off". The phone's ⚙ screen can switch this too. Whatever she reads is sent to
+# Google's API. Keys, passwords and browser data are always refused.
+files = "ask"
+# Folders she may look in.
+folders = ["~"]
+
+[amadeus.thinking]
+# Google Gemini model. API keys are not kept here: paste them on the phone (⚙), they go to
+# ~/.config/sg-shell/amadeus/keys, one per line. Several keys are rotated when one is rate-limited.
+model = "gemini-flash-latest"
+
+[amadeus.memory]
+# How many recent messages she is given each turn; how many long-term notes she may keep.
+history_messages = 24
+max_facts = 200
+
+# [amadeus personality] is a text file you can edit: ~/.config/sg-shell/amadeus/personality.md
+# Emotion pictures: ~/.local/share/sg-shell/amadeus/emotions/NAME.webp (neutral, smile, angry, …)
+
+[mail]
+# "mailto" = hand the draft to the default mail handler (xdg-open mailto:...).
+send = "mailto"

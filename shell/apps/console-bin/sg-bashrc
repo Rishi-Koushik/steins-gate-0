@@ -1,0 +1,6 @@
+# rcfile for the SG console: the user's normal bash setup, plus the game-style `help`.
+[ -f /etc/bash.bashrc ] && . /etc/bash.bashrc
+[ -f ~/.bashrc ] && . ~/.bashrc
+help() { if [ $# -eq 0 ]; then sg-help; else builtin help "$@"; fi; }
+PS1='\[\e[38;2;247;166;0m\]>\[\e[0m\] '
+sg-say "Console online. Type \"help\"."

@@ -1,0 +1,453 @@
+#!/usr/bin/python3 -I
+"""Phone Trigger: the in-game phone as a quick-settings panel, mail drafter and WhatsApp launcher.
+
+  sg-phone            toggle (Alt+P)
+  sg-phone --show | --hide | --whatsapp
+
+The phone UI is apps/phone/index.html in a transparent WebKitGTK window; this process is
+the native side (NetworkManager, rfkill, power profiles, brightness, volume, drafts).
+"""
+import json
+import re
+import subprocess
+import sys
+import time
+import urllib.parse
+from email.message import EmailMessage
+from email import policy, message_from_bytes
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import sg_common as C
+C.forward_to_running("local.amadeus.SgPhone", sys.argv)
+
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("WebKit", "6.0")
+gi.require_version("JavaScriptCore", "6.0")
+from gi.repository import Gtk, Gdk, Gio, GLib, WebKit, JavaScriptCore
+import cairo
+
+import sg_common as C
+
+REF_H = 720
+STAGE_W = 405          # reference-canvas width of the phone column (354 px phone + 51 px margin)
+DRAFTS = C.DATA_DIR / "drafts"
+A11Y = {
+    "large_text": None,  # handled via text-scaling-factor
+    "high_contrast": ("org.gnome.desktop.a11y.interface", "high-contrast"),
+    "reduce_motion": None,  # inverse of enable-animations
+    "screen_reader": ("org.gnome.desktop.a11y.applications", "screen-reader-enabled"),
+    "magnifier": ("org.gnome.desktop.a11y.applications", "screen-magnifier-enabled"),
+}
+
+
+def run(*argv, timeout=4):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def spawn(*argv):
+    try:
+        subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return True
+    except OSError:
+        return False
+
+
+def parse_contact(entry):
+    """'Name <mail@x> +4412345' → {name, email, phone}"""
+    email = re.search(r"<([^>]+)>", entry)
+    phone = re.search(r"(\+?\d[\d ]{6,})", entry)
+    name = re.sub(r"<[^>]+>|\+?\d[\d ]{6,}", "", entry).strip() or entry
+    return {"name": name, "email": email.group(1) if email else "",
+            "phone": re.sub(r"\D", "", phone.group(1)) if phone else ""}
+
+
+class Backend:
+    """Everything the stock quick-settings panel does, via the same system services."""
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.iface = Gio.Settings.new("org.gnome.desktop.interface")
+        self._backlight = None
+
+    # -- brightness: read sysfs, write through logind (no root needed for the active session).
+    #    GNOME 50 keeps its own slider inside the shell, with no public D-Bus API.
+    def backlight(self):
+        if self._backlight is None:
+            devs = sorted(Path("/sys/class/backlight").glob("*"))
+            rank = {"firmware": 0, "platform": 1, "raw": 2}
+
+            def key(d):
+                try:
+                    return rank.get((d / "type").read_text().strip(), 3)
+                except OSError:
+                    return 4
+            # a "raw" panel driver (e.g. intel_backlight) is what actually drives a laptop panel
+            # when a firmware/platform device is absent; skip GPU stubs that report no range
+            devs = [d for d in devs if self._read_int(d / "max_brightness", 0) > 1]
+            intel = [d for d in devs if "nvidia" not in d.name]
+            self._backlight = (sorted(intel or devs, key=key) or [False])[0]
+        return self._backlight or None
+
+    @staticmethod
+    def _read_int(path, default=None):
+        try:
+            return int(path.read_text())
+        except (OSError, ValueError):
+            return default
+
+    def brightness(self):
+        d = self.backlight()
+        if not d:
+            return None
+        cur, mx = self._read_int(d / "brightness"), self._read_int(d / "max_brightness")
+        return round(cur * 100 / mx) if cur is not None and mx else None
+
+    def set_brightness(self, value):
+        d = self.backlight()
+        mx = self._read_int(d / "max_brightness") if d else None
+        if not mx:
+            return
+        raw = max(1, round(mx * value / 100))
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            bus.call_sync("org.freedesktop.login1", "/org/freedesktop/login1/session/auto",
+                          "org.freedesktop.login1.Session", "SetBrightness",
+                          GLib.Variant("(ssu)", ("backlight", d.name, raw)), None,
+                          Gio.DBusCallFlags.NONE, 2000, None)
+        except GLib.Error:
+            pass
+
+    def rfkill(self, kind):
+        """True if every radio of this kind is soft-blocked."""
+        rows = [l.split() for l in run("rfkill", "-n", "-o", "TYPE,SOFT").splitlines()]
+        rows = [r for r in rows if len(r) == 2 and (kind == "all" or r[0] == kind)]
+        return bool(rows) and all(r[1] == "blocked" for r in rows)
+
+    def state(self):
+        wifi = run("nmcli", "-t", "-f", "WIFI", "general") == "enabled"
+        ssid = ""
+        if wifi:
+            for line in run("nmcli", "-t", "-f", "ACTIVE,SSID", "device", "wifi").splitlines():
+                if line.startswith("yes:"):
+                    ssid = line[4:]
+                    break
+        vol = re.search(r"([\d.]+)", run("wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"))
+        battery = None
+        for cap in sorted(Path("/sys/class/power_supply").glob("BAT*/capacity")):
+            try:
+                battery = int(cap.read_text())
+                break
+            except (OSError, ValueError):
+                pass
+        a11y = {
+            "large_text": self.iface.get_double("text-scaling-factor") >= 1.2,
+            "reduce_motion": not self.iface.get_boolean("enable-animations"),
+        }
+        for key, spec in A11Y.items():
+            if spec:
+                a11y[key] = Gio.Settings.new(spec[0]).get_boolean(spec[1])
+        return {
+            "wifi": wifi, "ssid": ssid,
+            "bt": not self.rfkill("bluetooth") and "Powered: yes" in run("bluetoothctl", "show"),
+            "air": self.rfkill("all"),
+            "eco": run("powerprofilesctl", "get") == "power-saver",
+            "bright": self.brightness(),
+            "vol": round(float(vol.group(1)) * 100) if vol else None,
+            "battery": battery,
+            "a11y": a11y,
+            "contacts": [parse_contact(c) for c in C.cfg_get(self.cfg, "phone", "contacts", [])],
+            "drafts": self.drafts(),
+        }
+
+    def set(self, key, value):
+        if key == "wifi":
+            run("nmcli", "radio", "wifi", "on" if value else "off")
+        elif key == "bt":
+            run("rfkill", "unblock" if value else "block", "bluetooth")
+            run("bluetoothctl", "power", "on" if value else "off")
+        elif key == "air":
+            run("rfkill", "block" if value else "unblock", "all")
+        elif key == "eco":
+            run("powerprofilesctl", "set", "power-saver" if value else "balanced")
+        elif key == "bright":
+            self.set_brightness(max(1, min(100, int(value))))
+        elif key == "vol":
+            run("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{max(0, min(100, int(value))) / 100:.2f}")
+        elif key == "a11y.large_text":
+            self.iface.set_double("text-scaling-factor", 1.25 if value else 1.0)
+        elif key == "a11y.reduce_motion":
+            self.iface.set_boolean("enable-animations", not value)
+        elif key.startswith("a11y.") and A11Y.get(key[5:]):
+            schema, name = A11Y[key[5:]]
+            Gio.Settings.new(schema).set_boolean(name, bool(value))
+
+    # -- mail drafts as .eml files --
+    def drafts(self):
+        out = []
+        for f in sorted(DRAFTS.glob("*.eml"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                m = message_from_bytes(f.read_bytes(), policy=policy.default)
+                out.append({"id": f.stem, "to": m.get("To", ""), "subject": m.get("Subject", "")})
+            except OSError:
+                pass
+        return out
+
+    def draft_path(self, draft_id):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", draft_id or ""):
+            return None
+        return DRAFTS / f"{draft_id}.eml"
+
+    def draft_save(self, to, subject, body, draft_id=""):
+        DRAFTS.mkdir(parents=True, exist_ok=True)
+        path = self.draft_path(draft_id)
+        if path is None:
+            draft_id = time.strftime("draft-%Y%m%d-%H%M%S")
+            path = DRAFTS / f"{draft_id}.eml"
+        m = EmailMessage()
+        # header values must be single-line
+        m["To"] = " ".join(to.split())
+        m["Subject"] = " ".join(subject.split())
+        m["X-Unsent"] = "1"
+        m.set_content(body)
+        path.write_bytes(m.as_bytes())
+        return {"id": draft_id}
+
+    def draft_load(self, draft_id):
+        path = self.draft_path(draft_id)
+        if not path or not path.exists():
+            return {"error": "draft not found"}
+        m = message_from_bytes(path.read_bytes(), policy=policy.default)
+        body = m.get_body(preferencelist=("plain",))
+        return {"id": draft_id, "to": m.get("To", ""), "subject": m.get("Subject", ""),
+                "body": body.get_content().rstrip("\n") if body else ""}
+
+    def draft_delete(self, draft_id):
+        path = self.draft_path(draft_id)
+        if path and path.exists():
+            path.unlink()
+        return {}
+
+    def mail_send(self, to, subject, body):
+        if not to.strip():
+            return {"error": "no recipient"}
+        q = urllib.parse.urlencode({"subject": subject, "body": body}, quote_via=urllib.parse.quote)
+        url = f"mailto:{urllib.parse.quote(to.strip(), safe='@,')}?{q}"
+        return {} if spawn("xdg-open", url) else {"error": "no mail handler"}
+
+
+class Phone(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="local.amadeus.SgPhone",
+                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.win = None
+        self.wa_win = None
+        self.loaded = False
+        self.cfg = C.load_config()
+        self.backend = Backend(self.cfg)
+        self.amadeus = None
+
+    def do_command_line(self, cl):
+        args = cl.get_arguments()[1:]
+        op = args[0].lstrip("-") if args else "toggle"
+        if op == "whatsapp":
+            self.hold_once()
+            self.whatsapp()
+            return 0
+        first = self.win is None
+        if first:
+            self.build()
+        if op == "toggle":
+            self.set_shown(True if first else not self.win.get_visible())
+        elif op == "show":
+            self.set_shown(True)
+        elif op == "hide":
+            self.set_shown(False)
+        else:
+            cl.printerr_literal(__doc__)
+            return 2
+        return 0
+
+    def hold_once(self):
+        if not getattr(self, "_held", False):
+            self._held = True
+            self.hold()
+
+    # ---- phone window ----
+    def geometry(self):
+        display = Gdk.Display.get_default()
+        mons = display.get_monitors()
+        mon = mons.get_item(0) if mons.get_n_items() else None
+        g = mon.get_geometry() if mon else None
+        w, h = (g.width, g.height) if g else (1280, 720)
+        scale = C.cfg_get(self.cfg, "phone", "scale", 0) or min(w / 1280, h / REF_H)
+        return scale, int(STAGE_W * scale), h
+
+    def build(self):
+        self.hold_once()
+        css = Gtk.CssProvider()
+        css.load_from_string("window.sgphone, window.sgphone * { background: transparent; }")
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.scale, w, h = self.geometry()
+        self.win = Gtk.ApplicationWindow(application=self, decorated=False, title="sg-phone")
+        self.win.add_css_class("sgphone")
+        self.win.set_default_size(w, h)
+        self.win.connect("close-request", lambda *_: (self.set_shown(False), True)[1])
+
+        ucm = WebKit.UserContentManager()
+        ucm.register_script_message_handler_with_reply("sg", None)
+        ucm.connect("script-message-with-reply-received::sg", self.on_message)
+        view = self.view = WebKit.WebView(user_content_manager=ucm)
+        view.set_background_color(Gdk.RGBA(0, 0, 0, 0))
+        s = view.get_settings()
+        s.set_enable_developer_extras(False)
+        s.set_allow_file_access_from_file_urls(True)
+        view.connect("load-changed", self.on_load)
+        view.connect("decide-policy", self.on_policy)
+        view.load_uri((C.DATA_DIR / "apps" / "phone" / "index.html").as_uri())
+        self.win.set_child(view)
+        self.win.connect("map", lambda *_: GLib.idle_add(self.update_input_region))
+
+    def update_input_region(self):
+        """Clicks outside the phone body fall through to the windows underneath."""
+        surface = self.win.get_surface()
+        if surface:
+            s = self.scale
+            w, h = self.win.get_width(), self.win.get_height()
+            x = w - int((51 + 354) * s)
+            region = cairo.Region(cairo.RectangleInt(max(0, x), int(10 * s), int(354 * s), h - int(10 * s)))
+            surface.set_input_region(region)
+        return False
+
+    def on_load(self, _view, event):
+        if event == WebKit.LoadEvent.FINISHED:
+            self.loaded = True
+            # cold start: give the view a moment to draw its first frame, or the
+            # rise + flip plays before anything is on screen
+            GLib.timeout_add(150, self._open_if_visible)
+
+    def _open_if_visible(self):
+        if self.win.get_visible():
+            self.js(f"phoneOpen({self.scale:.4f})")
+        return False
+
+    def on_policy(self, _view, decision, kind):
+        # the phone page never navigates anywhere
+        if kind == WebKit.PolicyDecisionType.NAVIGATION_ACTION:
+            uri = decision.get_navigation_action().get_request().get_uri()
+            if not uri.startswith("file://"):
+                decision.ignore()
+                return True
+        return False
+
+    def js(self, code):
+        self.view.evaluate_javascript(code, -1, None, None, None, None, None)
+
+    def set_shown(self, shown):
+        if shown:
+            self.win.present()
+            if self.loaded:
+                self.js(f"phoneOpen({self.scale:.4f})")
+        elif self.win.get_visible():
+            self.js("phoneClose()")
+            GLib.timeout_add(430, lambda: (self.win.set_visible(False), False)[1])
+
+    # ---- bridge ----
+    def on_message(self, _ucm, value, reply):
+        try:
+            msg = json.loads(value.to_string())
+            result = self.dispatch(msg)
+        except Exception as e:  # the page must always get an answer
+            result = {"error": str(e)}
+        reply.return_value(JavaScriptCore.Value.new_string(value.get_context(), json.dumps(result)))
+        return True
+
+    # ---- Amadeus (apps/amadeus): loaded on first use, answers arrive as amadeusEvent(...) ----
+    def amadeus_ctl(self):
+        if self.amadeus is None:
+            import amadeus
+            self.amadeus = amadeus.Controller(self.cfg, lambda ev: GLib.idle_add(self._amadeus_event, ev))
+        return self.amadeus
+
+    def _amadeus_event(self, ev):
+        self.js(f"window.amadeusEvent&&amadeusEvent({json.dumps(ev)})")
+        return False
+
+    def dispatch(self, msg):
+        b, cmd = self.backend, msg.get("cmd")
+        if str(cmd).startswith("amadeus_"):
+            return self.amadeus_ctl().handle(cmd, msg)
+        if cmd == "state":
+            return b.state()
+        if cmd == "set":
+            b.set(str(msg.get("key", "")), msg.get("value"))
+            return b.state()
+        if cmd == "draft_save":
+            return b.draft_save(msg.get("to", ""), msg.get("subject", ""), msg.get("body", ""), msg.get("id", ""))
+        if cmd == "draft_load":
+            return b.draft_load(msg.get("id", ""))
+        if cmd == "draft_delete":
+            return b.draft_delete(msg.get("id", ""))
+        if cmd == "mail_send":
+            return b.mail_send(msg.get("to", ""), msg.get("subject", ""), msg.get("body", ""))
+        if cmd == "whatsapp":
+            self.whatsapp(re.sub(r"\D", "", str(msg.get("phone", ""))))
+            return {}
+        if cmd == "open":
+            panel = {"wifi": "wifi", "universal-access": "universal-access"}.get(msg.get("what"))
+            if panel:
+                spawn("gnome-control-center", panel)
+            return {}
+        if cmd == "hide":
+            self.set_shown(False)
+            return {}
+        return {"error": f"unknown command {cmd}"}
+
+    # ---- WhatsApp Web, persistent profile ----
+    def whatsapp(self, phone=""):
+        url = "https://web.whatsapp.com/" + (f"send?phone={phone}" if phone else "")
+        if self.wa_win is None:
+            base = C.DATA_DIR / "whatsapp"
+            session = WebKit.NetworkSession.new(str(base / "data"), str(base / "cache"))
+            session.get_cookie_manager().set_persistent_storage(
+                str(base / "cookies.sqlite"), WebKit.CookiePersistentStorage.SQLITE)
+            view = WebKit.WebView(network_session=session)
+            s = view.get_settings()
+            s.set_user_agent(C.cfg_get(self.cfg, "phone", "whatsapp_user_agent", "") or None)
+            s.set_enable_media_stream(True)
+            s.set_javascript_can_access_clipboard(True)
+            view.connect("permission-request", self.on_wa_permission)
+            view.connect("show-notification", self.on_wa_notification)
+            win = Gtk.ApplicationWindow(application=self, title="WhatsApp — Phone Trigger")
+            win.set_default_size(1100, 760)
+            win.set_child(view)
+            win.connect("close-request", lambda w: (w.set_visible(False), True)[1])  # keep the session alive
+            self.wa_win, self.wa_view = win, view
+            view.load_uri(url)
+        elif phone:
+            self.wa_view.load_uri(url)
+        self.wa_win.present()
+
+    @staticmethod
+    def on_wa_permission(_view, request):
+        if isinstance(request, (WebKit.NotificationPermissionRequest, WebKit.UserMediaPermissionRequest)):
+            request.allow()
+        else:
+            request.deny()
+        return True
+
+    def on_wa_notification(self, _view, notification):
+        n = Gio.Notification.new(notification.get_title() or "WhatsApp")
+        n.set_body(notification.get_body() or "")
+        self.send_notification(None, n)
+        return True
+
+
+if __name__ == "__main__":
+    sys.exit(Phone().run(sys.argv))

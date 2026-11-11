@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+sg-console --new-tab; exec "$(dirname "$0")/sg-say" "Opened new tab."

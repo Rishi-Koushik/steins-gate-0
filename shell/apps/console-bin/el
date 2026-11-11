@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+if [ "${*,,}" = "psy kongroo" ]; then exec "$(dirname "$0")/sg-say" "…El Psy Kongroo."; fi
+echo "el: did you mean: el psy kongroo" >&2; exit 1

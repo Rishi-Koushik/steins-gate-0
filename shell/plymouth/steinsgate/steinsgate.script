@@ -1,0 +1,47 @@
+# Steins;Gate RE:BOOT boot splash: plays frame-1.png … frame-N.png once, then holds the last frame.
+# FRAME_COUNT and FRAME_FPS are filled in by install-plymouth.sh.
+FRAME_COUNT = @COUNT@;
+FRAME_FPS = @FPS@;
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+# fill the screen with the 16:9 frames (a 16:10 panel crops a little off each side)
+first = Image("frame-1.png");
+scale = screen_w / first.GetWidth();
+if (first.GetHeight() * scale < screen_h)
+    scale = screen_h / first.GetHeight();
+frame_w = Math.Int(first.GetWidth() * scale);
+frame_h = Math.Int(first.GetHeight() * scale);
+
+for (i = 1; i <= FRAME_COUNT; i++)
+    frames[i] = Image("frame-" + i + ".png").Scale(frame_w, frame_h);
+
+sprite = Sprite(frames[1]);
+sprite.SetX(Window.GetX() + (screen_w - frame_w) / 2);
+sprite.SetY(Window.GetY() + (screen_h - frame_h) / 2);
+
+tick = 0;
+fun refresh_callback() {
+    # Plymouth calls this 50 times a second
+    tick++;
+    n = Math.Int(tick * FRAME_FPS / 50) + 1;
+    if (n > FRAME_COUNT) n = FRAME_COUNT;
+    sprite.SetImage(frames[n]);
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# password prompt (encrypted disks) and messages, kept minimal
+fun display_normal_callback() { global.prompt_sprite = NULL; }
+fun display_password_callback(prompt, bullets) {
+    text = prompt + "  ";
+    for (i = 0; i < bullets; i++) text += "*";
+    img = Image.Text(text, 1, 1, 1);
+    global.prompt_sprite = Sprite(img);
+    global.prompt_sprite.SetPosition(Window.GetX() + (screen_w - img.GetWidth()) / 2, Window.GetY() + screen_h * 0.85, 10);
+}
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayPasswordFunction(display_password_callback);

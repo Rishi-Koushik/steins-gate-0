@@ -1,0 +1,8 @@
+{
+  "uuid": "sg-shell@amadeus.local",
+  "name": "Steins;Gate RE:BOOT shell",
+  "description": "Title-screen lock screen with nixie PIN panel, date badge, and window placement for the SG console / phone / clip apps. Personal use.",
+  "shell-version": ["50"],
+  "session-modes": ["user", "unlock-dialog"],
+  "version": 1
+}

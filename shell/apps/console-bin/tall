@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+sg-console --tall; exec "$(dirname "$0")/sg-say" "Console extended upward."
