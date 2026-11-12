@@ -18,3 +18,19 @@
     padding-left: 4px;
     padding-bottom: 7px;
 }
+/* canon-date line under the badge: a quiet countdown, orange on the day itself */
+.sg-date-badge-canon {
+    font-family: Adwaita Sans, Inter, sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.78);
+    background-color: rgba(0, 0, 0, 0.45);
+    border-radius: 0 8px 8px 0;
+    padding: 2px 12px 2px 14px;
+    margin-top: 5px;
+}
+.sg-date-badge-canon.sg-today {
+    color: #111;
+    background-color: #f7a600;
+    font-weight: 800;
+}

@@ -8,6 +8,7 @@ import {loadConfig, dataPath, RUNTIME_DIR} from './config.js';
 import {DateBadge} from './badge.js';
 import {WindowHelper} from './windows.js';
 import {LockScreen} from './lock.js';
+import {HomeExtras} from './home.js';
 
 export default class SgShellExtension extends Extension {
     enable() {
@@ -140,7 +141,14 @@ export default class SgShellExtension extends Extension {
         if (!this._windows)
             this._windows = new WindowHelper(() => this._dropCover());
         if (!this._badge && this._cfg.home.date_badge)
-            this._badge = new DateBadge();
+            this._badge = new DateBadge(this._cfg.home);
+        if (!this._home) {
+            try {
+                this._home = new HomeExtras(this._cfg);
+            } catch (e) {
+                console.warn(`[sg-shell] home extras unavailable: ${e}\n${e.stack}`);
+            }
+        }
     }
 
     _dropUser() {
@@ -148,6 +156,8 @@ export default class SgShellExtension extends Extension {
         this._windows = null;
         this._badge?.destroy();
         this._badge = null;
+        try { this._home?.destroy(); } catch (e) { console.warn(`[sg-shell] ${e}`); }
+        this._home = null;
     }
 
     // ----- lock screen -----
@@ -180,6 +190,7 @@ export default class SgShellExtension extends Extension {
     // ----- unlock movie -----
     _afterUnlock() {
         this._badge?.slideIn();
+        try { this._home?.loggedIn(); } catch (e) { console.warn(`[sg-shell] ${e}`); }
         if (!this._cfg.lock.unlock_movie) return;
         const bin = dataPath('apps', 'sg-clip');
         if (!GLib.file_test(bin, GLib.FileTest.IS_EXECUTABLE)) return;

@@ -22,7 +22,7 @@ install_files() {
 for n, v in (("Gtk","4.0"),("Vte","3.91"),("WebKit","6.0"),("Gst","1.0")): gi.require_version(n, v)' \
         || { echo "missing: python-gobject with gtk4, vte4, webkitgtk-6.0, gstreamer" >&2; exit 1; }
 
-    mkdir -p "$DATA"/{media,sounds,apps,console-bin,drafts} "$BIN_DIR" "$CONFIG_HOME/sg-shell" \
+    mkdir -p "$DATA"/{media,sounds,sounds/pack,apps,console-bin,drafts,mail/inbox,dmail,phone/wallpapers,phone/ringtones} "$BIN_DIR" "$CONFIG_HOME/sg-shell" \
              "$DATA_HOME/fonts/sg-shell" "$DATA_HOME/gnome-shell/extensions"
     # Media is not part of the public repository (see README → Media): copy what is there, name what is not.
     local missing=()
@@ -38,9 +38,9 @@ for n, v in (("Gtk","4.0"),("Vte","3.91"),("WebKit","6.0"),("Gst","1.0")): gi.re
     rm -rf "$DATA/apps" && cp -r "$SRC/apps" "$DATA/apps" && rm -rf "$DATA/apps/console-bin"
     rm -rf "$DATA/console-bin" && cp -r "$SRC/apps/console-bin" "$DATA/console-bin"
     cp -r "$SRC/tools" "$DATA/apps/"
-    cp -f "$SRC"/fonts/*.ttf "$DATA_HOME/fonts/sg-shell/"
+    cp -f "$SRC"/fonts/*.ttf "$SRC"/fonts/*.otf "$DATA_HOME/fonts/sg-shell/"
     fc-cache -f "$DATA_HOME/fonts" >/dev/null 2>&1 || true
-    for app in sg-console sg-phone sg-clip; do
+    for app in sg-console sg-phone sg-clip sg-mail; do
         chmod +x "$DATA/apps/$app"
         ln -sfn "$DATA/apps/$app" "$BIN_DIR/$app"
     done

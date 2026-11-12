@@ -43,3 +43,21 @@ Higher quality for a native build: re-encode from the originals at 1920×1080 (o
 `menu-lock-screen.webp` (title/menu look) · `menu-outline-text.webp` (outlined menu text) · `menu-continue-submenu.webp` (CONTINUE → LOAD / QUICK LOAD) ·
 `phone-send-mail.png`, `phone-in-game.webp` (phone look) · `nixie-tubes.png`, `nixie-meter-photo.png` (divergence meter) · `logo-crop.png` ·
 `wallpaper-current.webp`, `wallpaper-previous.webp` · `windows-quick-settings.png` (the panel the phone replaces) · `console-text-bar.webp` (the bar the console imitates).
+
+## Sound pack (optional, yours to supply)
+
+Drop audio files into `~/.local/share/sg-shell/sounds/pack/`. The file name (without extension) decides
+where it plays; anything missing falls back to the built-in beep or to silence. Lock-screen and home
+sounds go through the desktop's event-sound player, so use **`.ogg` or `.wav`** there; the phone also
+plays `.mp3`, `.opus`, `.flac` and `.m4a`.
+
+| File name | Plays |
+|---|---|
+| `ambience` | looped quietly on the lock screen (cicadas, CRT hum …); volume: `[lock] ambience_volume` |
+| `hover`, `select`, `back`, `ok`, `wrong`, `digit1` … `digit4` | replace the lock screen's built-in beeps of the same name |
+| `dmail` | a D-Mail appears on the lock screen |
+| `crt` | the desktop appears after the first unlock of a session (a Braun-tube click fits) |
+| `upa` | an Upa capsule is caught |
+| `phone_open`, `phone_close` | the phone rises / drops |
+| `mail`, `call` | mail arrives / Amadeus rings, when no ringtone is chosen in the phone's settings |
+

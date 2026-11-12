@@ -6,15 +6,27 @@ export const CONFIG_FILE = GLib.build_filenamev([GLib.get_user_config_dir(), 'sg
 export const RUNTIME_DIR = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'sg-shell']);
 
 const DEFAULTS = {
-    home: {wallpaper: '', date_badge: true},
+    home: {wallpaper: '', date_badge: true, canon_dates: true, canon_list: [], upa: true, upa_per_day: 3},
     lock: {
         enabled: true, title_screen: true, auth_mode: 'password', video: true, music: true, music_volume: 0.85,
         sounds: true, unlock_movie: true, boot_clip: 'manual', on_login: 'always', fit: 'contain', display_name: '',
+        lab_member: true, lab_member_no: 0, lab_member_name: '', ambience_volume: 0.5,
     },
+    dmail: {enabled: true, max_bytes: 36},
+    phone: {notifications_as_mail: true, character_mails: true},
+    amadeus: {calls: true},
 };
 
 function parseValue(raw) {
     raw = raw.trim();
+    if (raw.startsWith('[')) {
+        // one-line array of strings: ["a", "b"]
+        const items = [];
+        const re = /"((?:[^"\\]|\\.)*)"/g;
+        let m;
+        while ((m = re.exec(raw)) !== null) items.push(m[1].replace(/\\(["\\])/g, '$1'));
+        return items;
+    }
     if (raw.startsWith('"')) {
         const m = raw.match(/^"((?:[^"\\]|\\.)*)"/);
         return m ? m[1].replace(/\\(["\\])/g, '$1') : '';
@@ -38,7 +50,7 @@ export function loadConfig() {
             const s = line.match(/^\[([A-Za-z0-9_.-]+)\]$/);
             if (s) { section = s[1]; cfg[section] ??= {}; continue; }
             const kv = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.*)$/);
-            if (kv && section && !kv[2].trim().startsWith('['))
+            if (kv && section)
                 cfg[section][kv[1]] = parseValue(kv[2]);
         }
     } catch (e) {

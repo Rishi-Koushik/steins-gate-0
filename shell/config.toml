@@ -7,6 +7,14 @@
 # Empty = the bundled Steins;Gate wallpaper. Any image path works.
 wallpaper = ""
 date_badge = true
+# A small line under the badge: counts down to the next of these dates and turns orange on the day.
+canon_dates = true
+# Your own list replaces the built-in one, e.g. ["7.28 Radio Kaikan", "8.21 Operation Skuld"].
+canon_list = []
+# Now and then an Upa capsule drops onto the home screen; click it to add it to the collection
+# (phone → Gadgets → Upa collection). About this many a day.
+upa = true
+upa_per_day = 3
 
 [shortcuts]
 # Alt+C console, Alt+P phone (as in the demo). console_alt is an optional second console key.
@@ -42,11 +50,26 @@ boot_clip = "manual"
 # run on every power-on, like the demo: "always", "autologin" (only when GDM auto-login
 # is on, so you never type the password twice), "never".
 on_login = "always"
+# The nixie panel shows a Lab Member badge. 0 = number from the account (first user = 001).
+lab_member = true
+lab_member_no = 0
+# Name on the badge, e.g. "Hououin Kyouma". Empty = display_name, else the login name.
+lab_member_name = ""
+# Volume of the optional lock-screen room tone (sounds/pack/ambience.*, see docs/ASSETS.md).
+ambience_volume = 0.5
 # The clips and title screen are 16:9. "contain" shows the whole picture, with black bars
 # above and below on a 16:10 panel; "cover" fills the screen and crops 5 % per side.
 fit = "contain"
 # Label shown on the save slot. Empty = the login name.
 display_name = ""
+
+[dmail]
+# Press Tab on the lock screen (or pick EXTRA on the title menu) and type a short message: it is
+# shown on this screen the next time the laptop boots, then kept in the phone's inbox.
+# No password is needed to write one, exactly like the hint a stranger could leave on a sticky note.
+enabled = true
+# The PhoneWave's limit. Up to 280.
+max_bytes = 36
 
 [console]
 # Empty = your login shell.
@@ -57,6 +80,11 @@ font = "Adwaita Mono 13"
 
 [phone]
 contacts = ["Mayuri", "Daru", "Lukako", "Faris", "PhoneWave"]
+# Desktop notifications are also filed in the phone's inbox as mail (stored on this machine only).
+notifications_as_mail = true
+# Contacts who are in the list above write to you: Mayuri at login, Daru when a build fails in the
+# SG console, Faris when the battery is low. Highlighted words in their mails are your replies.
+character_mails = true
 whatsapp_user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 [amadeus]
@@ -70,11 +98,24 @@ user_name = ""
 files = "ask"
 # Folders she may look in.
 folders = ["~"]
+# She rings the phone when a command in the SG console ran longer than long_job_seconds (0 = never
+# for jobs), when the battery drops to 10 %, and once if you are still up at 3 a.m.
+calls = true
+long_job_seconds = 120
 
 [amadeus.thinking]
 # Google Gemini model. API keys are not kept here: paste them on the phone (⚙), they go to
 # ~/.config/sg-shell/amadeus/keys, one per line. Several keys are rotated when one is rate-limited.
 model = "gemini-flash-latest"
+
+[amadeus.salieri]
+# Salieri: a local model that answers when Amadeus cannot be reached (no network, no API key).
+# Needs Ollama running on this machine (pacman -S ollama; ollama pull <model>). Talk only, no file access.
+# "auto" = use it when it is there, "off" = never.
+enabled = "auto"
+url = "http://127.0.0.1:11434"
+# Empty = the first model Ollama has installed.
+model = ""
 
 [amadeus.memory]
 # How many recent messages she is given each turn; how many long-term notes she may keep.

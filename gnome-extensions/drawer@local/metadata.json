@@ -1,0 +1,7 @@
+{
+  "uuid": "drawer@local",
+  "name": "Side Drawer",
+  "description": "Super opens a left-side app drawer with search instead of the overview.",
+  "shell-version": ["50"],
+  "version": 1
+}

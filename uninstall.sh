@@ -15,7 +15,7 @@ if [ -x "$DATA/apps/tools/sg-settings.py" ]; then "$DATA/apps/tools/sg-settings.
 else "$HERE/shell/tools/sg-settings.py" restore; fi
 
 rm -rf "$DATA_HOME/gnome-shell/extensions/$UUID" "$DATA_HOME/fonts/sg-shell"
-for app in sg-console sg-phone sg-clip; do
+for app in sg-console sg-phone sg-clip sg-mail; do
     [ -L "$BIN_DIR/$app" ] && rm -f "$BIN_DIR/$app"
 done
 rm -rf "$DATA"/{media,sounds,apps,console-bin}

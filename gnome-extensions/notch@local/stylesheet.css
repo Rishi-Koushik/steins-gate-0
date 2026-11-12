@@ -1,0 +1,85 @@
+.notch-island {
+  background-color: #000;
+  border-radius: 0 0 15px 15px;
+  color: #f2f2f2;
+  font-size: 12px;
+  transition-duration: 200ms;
+}
+.notch-island.expanded {
+  border-radius: 0 0 26px 26px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* compact */
+.notch-compact { padding: 0 14px; spacing: 8px; }
+.notch-compact-text { font-weight: 600; }
+.notch-art { border-radius: 5px; }
+.notch-bars { spacing: 2px; }
+.notch-bar { width: 3px; height: 12px; border-radius: 2px; background-color: #5ee08a; }
+
+/* expanded */
+.notch-expanded { padding: 8px 12px 12px 12px; spacing: 12px; }
+.notch-heading { font-size: 9px; font-weight: 800; color: #8a8a8f; letter-spacing: 1px; padding-bottom: 3px; }
+
+.notch-left { spacing: 2px; }
+.notch-heading-open { padding-top: 6px; }
+.notch-app-row { spacing: 8px; }
+.notch-app-name { font-weight: 700; font-size: 12px; }
+.notch-win-title { color: #b8b8bd; font-size: 11px; }
+.notch-media-row { spacing: 4px; padding-top: 2px; }
+.notch-ctl { border-radius: 99px; padding: 3px 6px; color: #f2f2f2; }
+.notch-ctl:hover { background-color: rgba(255, 255, 255, 0.14); }
+.notch-ctl:active { background-color: rgba(255, 255, 255, 0.24); }
+
+.notch-right { border-left: 1px solid rgba(255, 255, 255, 0.10); padding-left: 10px; }
+.notch-list { spacing: 3px; }
+.notch-row { spacing: 4px; }
+.notch-tile { border-radius: 8px; padding: 3px 7px; background-color: rgba(255, 255, 255, 0.06); }
+.notch-tile:hover { background-color: rgba(255, 255, 255, 0.16); }
+.notch-tile.focused { background-color: rgba(94, 224, 138, 0.22); }
+.notch-tile-box { spacing: 6px; }
+.notch-tile-text { font-size: 11px; }
+.notch-empty { color: #8a8a8f; font-size: 11px; }
+
+/* quick settings mirror (left column) */
+.nq-list { spacing: 4px; padding-right: 6px; }
+.nq-empty { color: #8a8a8f; font-size: 11px; }
+.nq-system-row { spacing: 2px; padding-bottom: 2px; }
+.nq-battery-box { spacing: 4px; }
+.nq-battery { font-size: 11px; font-weight: 700; }
+.nq-icon-btn { border-radius: 99px; padding: 4px 6px; color: #f2f2f2; }
+.nq-icon-btn:hover, .nq-icon-btn:focus { background-color: rgba(255, 255, 255, 0.14); }
+.nq-icon-btn:active, .nq-icon-btn:checked { background-color: rgba(255, 255, 255, 0.24); }
+.nq-icon-btn:insensitive { color: #6a6a6f; }
+
+.nq-slider-row { spacing: 6px; padding: 0 2px; }
+.nq-slider-row .slider { height: 18px; min-width: 60px; }
+
+.nq-toggle-row { spacing: 2px; }
+.nq-toggle { border-radius: 10px; padding: 4px 8px; background-color: rgba(255, 255, 255, 0.07); color: #f2f2f2; }
+.nq-toggle:hover, .nq-toggle:focus { background-color: rgba(255, 255, 255, 0.15); }
+.nq-toggle:checked { background-color: #3584e4; color: #fff; }
+.nq-toggle:checked:hover { background-color: #4a91e8; }
+.nq-toggle:insensitive { color: #6a6a6f; }
+.nq-toggle-inner { spacing: 7px; }
+.nq-title { font-size: 11px; font-weight: 700; }
+.nq-subtitle { font-size: 9px; color: rgba(255, 255, 255, 0.82); }
+.nq-chevron { border-radius: 10px; padding: 0 6px; background-color: rgba(255, 255, 255, 0.07); color: #f2f2f2; }
+.nq-chevron:hover, .nq-chevron:focus { background-color: rgba(255, 255, 255, 0.15); }
+.nq-chevron:checked { background-color: rgba(255, 255, 255, 0.24); }
+
+.nq-submenu { spacing: 1px; margin: 3px 0 2px 10px; padding-left: 6px; border-left: 1px solid rgba(255, 255, 255, 0.12); }
+.nq-item { border-radius: 7px; padding: 3px 6px; color: #e4e4e8; }
+.nq-item:hover, .nq-item:focus { background-color: rgba(255, 255, 255, 0.12); }
+.nq-item.active { color: #fff; font-weight: 700; }
+.nq-item:insensitive { color: #6a6a6f; }
+.nq-item-inner { spacing: 6px; }
+.nq-item-text { font-size: 11px; }
+
+/* AFK button + black screen */
+.notch-afk { border-radius: 99px; padding: 1px 7px; margin-bottom: 3px; background-color: rgba(255, 255, 255, 0.08); color: #f2f2f2; }
+.notch-afk:hover { background-color: rgba(255, 255, 255, 0.18); }
+.notch-afk:active { background-color: rgba(255, 255, 255, 0.28); }
+.notch-afk-box { spacing: 4px; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.afk-screen { background-color: #000; }
+.afk-hint { color: #3a3a3e; font-size: 13px; }

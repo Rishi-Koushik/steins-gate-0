@@ -74,6 +74,15 @@ Makise Kurisu as an AI you can talk to, in `shell/apps/amadeus/`, one file per s
 - **Emotions**: every reply carries `[emotion:NAME]` tags; the phone shows the picture with that name and the
   name as a label. Only `neutral` ships. Add `smile.webp`, `angry.png`, … to
   `~/.local/share/sg-shell/amadeus/emotions/`; a missing picture falls back to the nearest one, then neutral.
+- **Full-size view** (default skin): opening Amadeus drops the phone out of sight (`phoneOut`) and a glass
+  panel (`#amx` in `phone/index.html`) rises in the same column — big picture of her, THINKING / PERSONALITY /
+  MEMORY pills, the emotion as English + Japanese label, frosted chat card. ‹ or Esc brings the phone back up;
+  ⚙ / THINKING / MEMORY go to the phone's settings / memory views. While it is up the window's input region is
+  the panel (`region` command in `sg-phone`). The RINE skin keeps the old in-phone chat. The Japanese labels use
+  `shell/fonts/NotoSansCJKjp-AmadeusSubset.otf` (only those ~30 glyphs, cut from Noto Sans CJK JP, SIL OFL).
+- **Faces** were copied from the owner's Android Amadeus app (`/sdcard/Android/data/dev.amadeus/files/emotions/`,
+  13 PNGs) into `~/.local/share/sg-shell/amadeus/emotions/` — personal copies, not in the repo. `FALLBACK` in
+  `personality.py` maps emotions without a picture (smile, annoyed, worried, …) onto the nearest one.
 - **Files**: she can list, search and read under `[amadeus] folders` (default: home) and change files.
   With `files = "ask"` (default) each change is shown on the phone as a diff with Allow / Refuse; the
   original is copied to `~/.local/share/sg-shell/amadeus/backups/<time>/` first. She cannot run programs.
@@ -81,6 +90,30 @@ Makise Kurisu as an AI you can talk to, in `shell/apps/amadeus/`, one file per s
   stores, browser profiles, `.env`, `*.pem`/`*.key` and her own key file are refused (`DENY_*` in `thinking.py`).
 - Tested here against a local stand-in for the API (tool loop, approval, backup, key rotation, model
   fallback); not yet run against Google's servers, because no key was available.
+
+## D-Mail, inbox, calls, Upa (what talks to what)
+
+| Piece | Implementation |
+|---|---|
+| D-Mail | `lock.js` stages `dmail` (compose: Tab or EXTRA) and `dmail-in` (shown before the menu / nixie panel). Stored as `dmail/ID.json` with the kernel boot id; "arrived" = written under a different boot id. `mailbox.js` holds the file helpers. |
+| Inbox | One JSON file per mail in `~/.local/share/sg-shell/mail/inbox/`, so the extension (`mailbox.js`) and the phone (`sg_mailbox.py`) both add mail without sharing a file. The phone watches the folder and buzzes. |
+| Notifications as mail | `home.js` connects to every `MessageTray` source's `notification-added` (unlocked session only). |
+| Character mails | `sg-mail event login|build-failed|battery-low`, texts in `phone/characters.json`, cool-downs in `mail/state.json`. Login and battery come from `home.js`, build failures from the console's `sg-bashrc` prompt hook. |
+| Calls | `sg-phone --call REASON [DETAIL]`. `home.js` (battery ≤ 10 %, 3 a.m. while not idle) and `sg-bashrc` (command ran ≥ `long_job_seconds`). Lines are canned (`personality.CALL_LINES`); answering adds the line to the conversation. |
+| Upa | `home.js` rolls once a minute, shows a capsule as chrome above the windows (hidden under fullscreen), writes `upa/collection.json`. |
+| Screenshot gadget | The phone writes `screenshot` to `$XDG_RUNTIME_DIR/sg-shell/shell-cmd`; `home.js` watches that file and opens the shell's screenshot tool. |
+| Salieri | `thinking.Salieri`: Ollama's `/api/chat` on 127.0.0.1, used when Gemini raises `NetworkError` or there is no key. |
+
+The login lock screen shows arrived D-Mails itself; D-Mails it never showed (stock lock screen, F12) are
+filed into the inbox by `home.js` a minute into the session.
+
+Tested the same way as the rest (isolated headless shell, own D-Bus session and XDG dirs): D-Mail compose,
+byte limit, save, arrival and hand-over to the inbox; Lab Member badge; wrong-PIN worldline; canon line on
+the badge; notification → mail; Upa drop, catch and collection; the command file; every new phone view,
+replies, mail arrival, calls answered / declined / closed; Amadeus nickname, rate-limit, offline and Salieri
+paths against local stand-ins for both APIs; the console hooks with stubbed `sg-mail` / `sg-phone`.
+Not exercised: sound output (ringtones, sound pack, ambience), a real Ollama server, real battery and
+3 a.m. triggers (the code paths were called directly), and the real 2560×1600 panel.
 
 ## Animations
 

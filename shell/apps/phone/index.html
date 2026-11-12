@@ -5,6 +5,8 @@
 <title>Phone Trigger</title>
 <style>
 @font-face{font-family:"Archivo Black";src:url("../fonts/ArchivoBlack-Regular.ttf")}
+/* only the kana/kanji of the emotion labels (通常, 不機嫌, …), cut from Noto Sans CJK JP (SIL OFL) */
+@font-face{font-family:"Amadeus JP";src:url("../fonts/NotoSansCJKjp-AmadeusSubset.otf")}
 :root{--orange:#f7a600;--sans:"Adwaita Sans","Inter","DejaVu Sans",sans-serif;--s:1}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:transparent;overflow:hidden;font-family:var(--sans);user-select:none;color:#fff}
@@ -85,17 +87,142 @@ html,body{height:100%;background:transparent;overflow:hidden;font-family:var(--s
 .amin{flex:none;display:flex;gap:4px;padding:3px 4px;background:#10201c;border-top:1px solid #2a6a58}
 .amin input{flex:1;min-width:0;background:#06100d;border:1px solid #2a6a58;color:#e8fff6;font:13px var(--sans);padding:3px 5px;outline:none;user-select:text}
 .amin .phbtn:disabled{filter:grayscale(1);opacity:.6}
+/* ---- home wallpaper, six tiles ---- */
+#pscr.home.wall{background-size:cover;background-position:center}
+#pscr.home.wall .emc,#pscr.home.wall .circ{display:none}
+.mgrid{top:74px}
+/* ---- inbox, Phone Trigger replies ---- */
+.prow.unread{font-weight:700}.prow.unread::before{content:"● ";color:#e8761c}
+.prow small{font-size:11px;opacity:.7}
+.mhead{padding:4px 10px;font-size:12px;color:#334;background:#d3e6d6;border-bottom:1px solid #b9c9bc}
+.mtext{padding:8px 10px;font-size:14px;line-height:1.35;color:#111;white-space:pre-wrap;word-break:break-word;user-select:text}
+.kw{color:#0b4fc0;text-decoration:underline;cursor:pointer;font-weight:700}.kw:hover{background:var(--orange);color:#000}
+.kw.used{color:#556;cursor:default;text-decoration:none}.kw.used:hover{background:none;color:#556}
+.sent{margin:0 10px 8px auto;padding:5px 9px;background:#1f5fa8;color:#fff;font-size:13px;border-radius:8px;width:fit-content;max-width:88%}
+/* ---- incoming mail / call ---- */
+#phoneWrap.vib{animation:vib .45s linear 2}
+#phoneWrap.ringing{animation:vib .45s linear infinite}
+@keyframes vib{0%,100%{translate:0 0}20%{translate:-4px 0}40%{translate:4px 0}60%{translate:-3px 0}80%{translate:3px 0}}
+#pscr.call{background:radial-gradient(#123a31,#06100d);color:#d8efe6;overflow:hidden;display:flex;flex-direction:column;align-items:center;text-align:center}
+.callt{font:700 12px var(--sans);letter-spacing:.3em;color:var(--orange);margin-top:16px;animation:blink 1s steps(2) infinite}
+.callimg{width:112px;height:112px;border-radius:50%;object-fit:cover;object-position:top;border:3px solid #7ff0c8;margin-top:10px;background:#123a31}
+.calln{font:400 22px "Archivo Black","Arial Black",sans-serif;color:#7ff0c8;margin-top:8px}
+.callb{display:flex;gap:16px;margin-top:14px}
+.callb button{font:700 14px var(--sans);border:0;padding:8px 18px;border-radius:18px;color:#fff;cursor:pointer}
+.callb .ans{background:#1c9a4a}.callb .dec{background:#c0392b}.callb button:hover{filter:brightness(1.2)}
+@keyframes blink{50%{opacity:.25}}
+/* ---- Amadeus: connection glitch, weak signal, stickers, RINE skin ---- */
+.amglitch{position:absolute;inset:0;z-index:5;background:#020806;color:#7ff0c8;font:11px/1.6 "Adwaita Mono",monospace;padding:64px 14px 0;pointer-events:none;animation:glout .35s 1.5s forwards}
+.amglitch::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(transparent 0 2px,#7ff0c822 2px 3px);animation:scan .18s steps(3) infinite}
+.amglitch b{display:block;font:400 18px "Archivo Black","Arial Black",sans-serif;letter-spacing:.06em;margin-bottom:6px;animation:jit .12s steps(2) infinite}
+@keyframes glout{to{opacity:0;visibility:hidden}}
+@keyframes scan{to{background-position:0 3px}}
+@keyframes jit{50%{transform:translateX(2px) skewX(-6deg);opacity:.75}}
+#amimg.static{animation:jit .14s steps(2) infinite;filter:grayscale(.8) contrast(1.4)}
+.amtop.static::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(transparent 0 1px,#ffffff26 1px 2px);animation:scan .1s steps(2) infinite}
+.stk{display:inline-block;padding:5px 10px;border-radius:14px;background:#fff7d6;border:2px solid var(--orange);color:#7a4b00;font:800 13px var(--sans);transform:rotate(-3deg)}
+.amm.user:has(.stk),.amm.ai:has(.stk){background:none!important;border:0;padding:2px 0}
+.stkbar{flex:none;display:none;flex-wrap:wrap;gap:4px;padding:4px;background:#0004}
+.stkbar.on{display:flex}.stkbar .stk{cursor:pointer;font-size:11px;padding:3px 7px;transform:none}
+#pscr.am.rine{background:#9dbbd8;color:#111}
+#pscr.am.rine .amtop{height:46px;background:#2b3a4d;border-bottom:0}
+#pscr.am.rine #amimg{width:38px;height:38px;left:6px;top:4px;border-radius:50%;object-fit:cover;object-position:top}
+#pscr.am.rine .aminfo{left:52px;top:5px;color:#dfe8f2;white-space:nowrap}
+#pscr.am.rine .aminfo b{font:700 14px var(--sans);color:#fff;letter-spacing:0}
+#pscr.am.rine #amemo{margin-top:1px}
+#pscr.am.rine #amst{display:inline-block;margin:0 0 0 6px;max-width:92px;vertical-align:bottom}
+#pscr.am.rine .amnav{color:#dfe8f2;top:5px;bottom:auto}
+#pscr.am.rine .amm{border-radius:12px;padding:4px 9px}
+#pscr.am.rine .amm.user{background:#7be05a;color:#111}
+#pscr.am.rine .amm.ai{background:#fff;color:#111;border-left:0}
+#pscr.am.rine .amin{background:#fff;border-top:1px solid #c8d2dc}
+#pscr.am.rine .amin input{background:#f1f3f5;border:1px solid #c8d2dc;color:#111}
+/* ---- Amadeus, full size: the phone drops away and this glass panel takes its place ---- */
+#phone.back{transform:none;animation:phoneBack .6s cubic-bezier(.2,.8,.25,1) both}
+@keyframes phoneBack{from{transform:translateY(1100px)}to{transform:none}}
+#amx{position:absolute;right:12px;top:12px;width:381px;height:696px;border-radius:30px;overflow:hidden;visibility:hidden;opacity:0;pointer-events:none;
+ background:radial-gradient(120% 70% at 50% 42%,#1a2130 0%,#0c1017 55%,#07090d 100%);border:1px solid rgba(255,255,255,.09);
+ box-shadow:0 24px 60px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.06);color:#e9edf3;font-family:var(--sans)}
+#amx.show{visibility:visible;opacity:1;pointer-events:auto;animation:axIn .6s cubic-bezier(.2,.8,.25,1) both}
+#amx.out{visibility:visible;animation:axOut .38s cubic-bezier(.6,0,.9,.4) both}
+@keyframes axIn{from{opacity:0;transform:translateY(60px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes axOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(90px) scale(.97)}}
+.ax-bg i{position:absolute;border-radius:40px;filter:blur(28px)}
+.ax-bg .b1{left:14px;top:150px;width:150px;height:300px;background:rgba(95,105,125,.28)}
+.ax-bg .b2{right:8px;top:200px;width:110px;height:260px;background:rgba(70,80,100,.25)}
+.ax-bg .b3{left:40px;top:118px;width:64px;height:64px;background:rgba(170,40,50,.20)}
+.ax-bg .b4{right:28px;top:236px;width:72px;height:110px;background:rgba(50,140,90,.16)}
+.ax-rings{position:absolute;left:0;top:0;pointer-events:none}
+.ax-rings g{transform-origin:190px 330px;animation:axSpin 70s linear infinite}
+.ax-rings g.r2{animation-duration:100s;animation-direction:reverse}
+#amx.busy .ax-rings g{animation-duration:5s}#amx.busy .ax-rings g.r2{animation-duration:8s}
+#amx.busy .ax-rings{animation:axPulse 1.2s ease-in-out infinite}
+@keyframes axSpin{to{transform:rotate(360deg)}}@keyframes axPulse{50%{opacity:.4}}
+.ax-fig{position:absolute;left:0;right:0;top:94px;bottom:150px;pointer-events:none;transform-origin:50% 100%}
+#amx.show .ax-fig{animation:axFig .9s .2s both,axBreath 5s 1.1s ease-in-out infinite}
+#amx.glitch.show .ax-fig{animation-delay:1.3s,2.2s}
+@keyframes axFig{0%{opacity:0;filter:brightness(2.4) blur(6px);transform:translateY(26px)}60%{opacity:1;filter:brightness(1.3) blur(1px)}100%{opacity:1;filter:none;transform:none}}
+@keyframes axBreath{50%{transform:scale(1.008) translateY(-1px)}}
+.ax-k{position:absolute;left:0;right:0;bottom:0;margin:0 auto;height:100%;opacity:0;transform:translateY(5px);transition:opacity .35s ease,transform .35s ease}
+.ax-k.on{opacity:1;transform:none}
+#amx.weak .ax-k.on{animation:jit .14s steps(2) infinite;filter:grayscale(.8) contrast(1.4)}
+.ax-spark{position:absolute;right:88px;bottom:236px;color:rgba(205,215,235,.35);font-size:18px;z-index:1;pointer-events:none}
+.ax-top{position:absolute;left:16px;right:16px;top:20px;height:26px;display:flex;align-items:center;gap:6px;z-index:2}
+.ax-top b{font:800 15px var(--sans);letter-spacing:.32em;color:rgba(225,230,238,.85)}
+.ax-top span{cursor:pointer;color:rgba(225,230,238,.7);display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:13px;font-size:20px}
+.ax-top span:hover{color:#fff;background:rgba(255,255,255,.1)}
+.ax-top .ax-gear{margin-left:auto}
+.ax-pills{position:absolute;left:16px;right:16px;top:56px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;z-index:2}
+.ax-pills span{height:28px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:6px;font:500 10.5px var(--sans);letter-spacing:.05em;
+ color:rgba(220,226,235,.62);background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.15);cursor:pointer}
+.ax-pills span:hover{color:#fff;border-color:rgba(255,255,255,.3)}
+.ax-pills i{width:7px;height:7px;border-radius:50%;background:rgba(150,156,168,.55);transition:.3s}
+.ax-pills i.on{background:#5fe0a0;box-shadow:0 0 6px #5fe0a0}
+.ax-pills i.busy{background:#ffb347;box-shadow:0 0 8px #ffb347;animation:blink .8s ease-in-out infinite}
+.ax-pills i.bad{background:#ff5d5d;box-shadow:0 0 6px #ff5d5d}
+.ax-emo{position:absolute;left:50%;bottom:226px;transform:translateX(-50%);white-space:nowrap;padding:4px 6px 4px 14px;border-radius:12px;font:600 10.5px var(--sans);letter-spacing:.34em;
+ color:rgba(190,208,235,.92);background:rgba(10,14,22,.62);border:1px solid rgba(255,255,255,.10);z-index:4;pointer-events:none;
+ -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ax-emo.flash{animation:axEmo .5s ease-out}
+@keyframes axEmo{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%)}}
+#axjp{margin-left:12px;letter-spacing:.18em;font-family:"Amadeus JP","Noto Sans CJK JP",var(--sans)}
+.ax-card{position:absolute;left:14px;right:14px;bottom:14px;height:204px;border-radius:26px;z-index:3;display:flex;flex-direction:column;padding:10px;gap:5px;
+ background:linear-gradient(180deg,rgba(118,122,130,.86) 0%,rgba(68,71,78,.88) 22%,rgba(50,53,59,.9) 48%,rgba(86,89,97,.88) 64%,rgba(46,49,55,.92) 100%);
+ border:1px solid rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(255,255,255,.06),0 12px 30px rgba(0,0,0,.45);
+ -webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2)}
+#axlog{flex:1;overflow:auto;font-size:12.5px;line-height:1.35;user-select:text;padding:2px 4px;-webkit-mask-image:linear-gradient(transparent,#000 14px);mask-image:linear-gradient(transparent,#000 14px)}
+#axlog::-webkit-scrollbar{width:0}
+#axlog .amm{border-radius:12px;padding:5px 9px;margin:4px 0}
+#axlog .amm.ai{background:rgba(255,255,255,.09);border-left:0;color:#eef2f7}
+#axlog .amm.user{background:rgba(120,160,255,.28);color:#fff}
+#axlog .amm.sys{background:rgba(255,90,90,.16);color:#ffd6d6}
+#axst{font-size:10px;color:rgba(220,226,235,.55);padding:0 10px;height:12px;line-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ax-in{flex:none;display:flex;align-items:center;gap:2px;height:40px;border-radius:20px;padding:0 5px 0 4px;
+ background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.12)}
+.ax-in input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:#fff;font:14px var(--sans);padding:0 8px;user-select:text}
+.ax-in input::placeholder{color:rgba(235,240,248,.5)}
+.ax-in button{flex:none;width:30px;height:30px;border-radius:15px;border:0;background:transparent;color:rgba(230,235,245,.75);font-size:15px;cursor:pointer}
+.ax-in button:hover{background:rgba(255,255,255,.13);color:#fff}.ax-in button:disabled{opacity:.35;cursor:default}
+.ax-card .stkbar{border-radius:12px}
+.ax-glitch{position:absolute;inset:0;z-index:6;background:#05070a;color:#9fd8ff;font:11px/1.7 "Adwaita Mono",monospace;padding:130px 28px 0;pointer-events:none;visibility:hidden;opacity:0}
+.ax-glitch b{display:block;font:800 17px var(--sans);letter-spacing:.3em;margin-bottom:8px;animation:jit .12s steps(2) infinite}
+.ax-glitch::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(transparent 0 2px,#9fd8ff1c 2px 3px);animation:scan .18s steps(3) infinite}
+#amx.glitch.show .ax-glitch{visibility:visible;animation:axGl 1.7s both}
+@keyframes axGl{0%,72%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
+.ax-toast{position:absolute;left:24px;right:24px;top:96px;z-index:4;padding:8px 12px;border-radius:14px;font-size:11px;line-height:1.4;color:#e9edf3;
+ background:rgba(30,34,42,.85);border:1px solid rgba(255,255,255,.14);opacity:0;transition:opacity .25s;pointer-events:none;word-break:break-word}
+.ax-toast.on{opacity:1}
 </style>
 </head>
 <body>
-<div id="stage"><div id="phoneWrap"><div id="phone"></div></div></div>
+<div id="stage"><div id="phoneWrap"><div id="phone"></div></div><div id="amx"></div></div>
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let actx;function beep(f=900,d=.05,v=.03,t='square'){try{actx=actx||new AudioContext();const o=actx.createOscillator(),g=actx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(actx.destination);o.start();g.gain.exponentialRampToValueAtTime(1e-4,actx.currentTime+d);o.stop(actx.currentTime+d)}catch(e){}}
 
 /* ---- native bridge (sg-phone); a mock keeps the page usable in a plain browser ---- */
-const mock={wifi:true,ssid:'(demo)',bt:false,air:false,eco:false,bright:70,vol:60,battery:80,contacts:['Mayuri','Daru'],drafts:[],a11y:{}};
+const mock={wifi:true,ssid:'(demo)',bt:false,air:false,eco:false,bright:70,vol:60,battery:80,contacts:['Mayuri','Daru'],drafts:[],a11y:{},unread:0,sounds:{},prefs:{skin:'amadeus'},wallpapers:[],ringtones:[]};
 async function call(cmd,args={}){
   const h=window.webkit?.messageHandlers?.sg;
   if(!h){if(cmd==='state')return mock;if(cmd==='set'){mock[args.key]=args.value;return mock}return {}}
@@ -104,6 +231,17 @@ async function call(cmd,args={}){
 let st=mock;
 async function refresh(){const r=await call('state');if(r&&!r.error)st=r;paintStatus();return st}
 async function set(key,value){const r=await call('set',{key,value});if(r&&!r.error)st=r;paintStatus()}
+
+/* ---- sounds: the owner's sound pack / ringtone when there is one, a beep otherwise ---- */
+function snd(name,fallback){const u=st.sounds&&st.sounds[name];
+  if(!u)return fallback&&fallback();
+  try{const a=new Audio(u);a.volume=.8;a.play().catch(()=>fallback&&fallback())}catch(e){fallback&&fallback()}}
+let ringA=null,ringT=0;
+function ringStop(){if(ringA){ringA.pause();ringA=null}clearTimeout(ringT);clearInterval(ringT);ringT=0;$('#phoneWrap').classList.remove('ringing')}
+function ringStart(loop){ringStop();const u=st.ringtone_uri||(st.sounds&&st.sounds[loop?'call':'mail']);
+  if(u){ringA=new Audio(u);ringA.loop=!!loop;ringA.play().catch(()=>{});if(!loop)ringT=setTimeout(ringStop,6000)}
+  else{const pat=()=>{beep(1400,.09,.05);setTimeout(()=>beep(1750,.09,.05),130);setTimeout(()=>beep(1400,.09,.05),260)};pat();if(loop)ringT=setInterval(pat,1400)}}
+function vibrate(){const w=$('#phoneWrap');w.classList.remove('vib');void w.offsetWidth;w.classList.add('vib')}
 
 const I={
  sig:'<svg id="isig" width="24" height="16" viewBox="0 0 24 16"><g fill="#fff"><circle cx="4" cy="4" r="2.3"/><rect x="3" y="6" width="2" height="9"/><rect x="10" y="10" width="3" height="5"/><rect x="14.5" y="6" width="3" height="9"/><rect x="19" y="2" width="3" height="13"/></g></svg>',
@@ -116,6 +254,7 @@ const I={
  book:'<svg width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 4C9 2 5 2 1 3v14c4-1 8-1 12 1 4-2 8-2 12-1V3c-4-1-8-1-12 1zM13 4v14"/></svg>',
  cam:'<svg width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1.5" y="3" width="23" height="15" rx="2"/><circle cx="13" cy="10.5" r="4.5"/></svg>',
  gear:'<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="3.4"/><path d="M11 1.5v3M11 17.5v3M1.5 11h3M17.5 11h3M4.3 4.3l2.1 2.1M15.6 15.6l2.1 2.1M17.7 4.3l-2.1 2.1M6.4 15.6l-2.1 2.1"/></svg>',
+ upa:'<svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="21" r="15" fill="#62cc5c"/><path d="M5 21h30" stroke="#1d5a1a" stroke-width="2"/><circle cx="15" cy="16" r="2.2" fill="#111"/><circle cx="25" cy="16" r="2.2" fill="#111"/><circle cx="13" cy="11" r="3" fill="#fff" opacity=".5"/></svg>',
  env2:'<svg width="26" height="18" viewBox="0 0 26 18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1.5" y="1.5" width="23" height="15"/><path d="M2 3l11 8 11-8"/></svg>'};
 
 const ph=$('#phone');
@@ -132,14 +271,15 @@ ph.innerHTML=`
  </div>
  <div class="bot"><svg width="230" height="112" viewBox="0 0 230 112" fill="none" stroke="#8a8f99" stroke-width="2"><path d="M70 4h90l-14 36H84z"/><path d="M6 46l66 6v30L6 66z"/><path d="M224 46l-66 6v30l66-16z"/><rect x="88" y="58" width="54" height="30" rx="8"/><path d="M6 78h20M204 78h20"/></svg></div>`;
 const pscr=$('#pscr');
-const sc=c=>{pscr.className=c||''};
+const sc=c=>{pscr.className=c||'';pscr.style.backgroundImage=''};
+let cur='home';
 const head=(t,back)=>`<div class="head">${esc(t)}${back?`<span class="back" data-back="${back}">‹ back</span>`:''}</div>`;
 function wire(){pscr.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{beep(700,.04);views[b.dataset.back]()})}
 
 function paintStatus(){
   const d=new Date();$('#pclk').textContent=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',hour12:false});
   $('#isig').classList.toggle('off',!st.wifi||st.air);
-  $('#imail').classList.toggle('off',!(st.drafts&&st.drafts.length));
+  $('#imail').classList.toggle('off',!(st.unread>0));
   const n=Math.max(0,Math.min(4,Math.ceil((st.battery??100)/25)));
   $$('#ibat rect').forEach((r,i)=>r.style.opacity=i<n?1:.15);
 }
@@ -150,11 +290,13 @@ views.home=function(){sc('home');
   pscr.innerHTML=`<div class="mh">MENU</div><div class="emc">E=mc²</div>
    <svg class="circ" viewBox="0 0 270 290"><path d="M150 0v34l28 28v60l22 22v70l-18 18v58"/><path d="M200 0v26l30 30v90l-24 24v120"/><path d="M262 40v140l-20 20v90"/><path d="M120 222h36l16 16h40"/></svg>
    <div class="mgrid">
-    <div class="tile" data-a="mail"><div class="ic">${I.env}</div>MAIL</div>
+    <div class="tile" data-a="inbox"><div class="ic">${I.env}</div>MAIL</div>
     <div class="tile" data-a="contacts"><div class="ic">${I.person}</div>Contacts</div>
     <div class="tile" data-a="net"><div class="ic">${I.net}</div>Network</div>
     <div class="tile" data-a="set"><div class="ic">${I.set}</div>Settings</div>
-    <div class="tile" data-a="amadeus"><div class="ic kface"></div>Amadeus</div></div>`;
+    <div class="tile" data-a="amadeus"><div class="ic kface"></div>Amadeus</div>
+    <div class="tile" data-a="gadgets"><div class="ic">${I.upa}</div>Gadgets</div></div>`;
+  if(st.wallpaper_uri){pscr.classList.add('wall');pscr.style.backgroundImage=`url("${st.wallpaper_uri}")`}
   pscr.querySelectorAll('[data-a]').forEach(t=>t.onclick=()=>{beep(1300,.04);views[t.dataset.a]()})};
 
 views.net=async function(){sc('');await refresh();
@@ -169,6 +311,8 @@ views.set=async function(){sc('');await refresh();
   pscr.innerHTML=head('Settings','home')+`<div class="prow" data-e="1">Energy saver<span class="st">${st.eco?'ON':'OFF'}</span></div>
    <div class="slr">☀<input type="range" id="rb" min="1" max="100" value="${st.bright??50}" ${st.bright==null?'disabled':''}></div>
    <div class="slr">🔊<input type="range" id="rv" min="0" max="100" value="${st.vol??50}"></div>
+   <div class="prow" data-v="wall">Phone wallpaper ›<span class="st">${esc(st.prefs?.wallpaper||'default')}</span></div>
+   <div class="prow" data-v="ring">Ringtone ›<span class="st">${esc(st.prefs?.ringtone||'default')}</span></div>
    <div class="prow" data-v="a11y">Accessibility ›</div><div class="prow" data-v="studio">Studio effects ›</div>`;
   pscr.querySelector('[data-e]').onclick=async()=>{beep(1000,.04);await set('eco',!st.eco);views.set()};
   $('#rb').oninput=e=>set('bright',+e.target.value);
@@ -182,6 +326,71 @@ views.a11y=async function(){sc('');await refresh();const a=st.a11y||{};
   pscr.querySelector('[data-o]').onclick=()=>call('open',{what:'universal-access'});wire()};
 views.studio=function(){sc('');pscr.innerHTML=head('Studio effects','set')+`<div class="prow note">Studio effects (camera blur, eye contact, voice focus) are a Windows feature and have no GNOME equivalent on this machine.</div>`;wire()};
 
+/* ---- phone wallpaper / ringtone: files the owner puts in the two folders ---- */
+function picker(title,key,list,dir,after){sc('');const now=st.prefs?.[key]||'';
+  pscr.innerHTML=head(title,'set')+[''].concat(list||[]).map(n=>`<div class="prow ${n===now?'sel':''}" data-p="${esc(n)}">${esc(n||'Default')}</div>`).join('')+
+   `<div class="prow note">Put your own files in ${esc(dir||'')} and they appear here.</div>`;
+  pscr.querySelectorAll('[data-p]').forEach(r=>r.onclick=async()=>{beep(1000,.04);const m=await call('pref',{key,value:r.dataset.p});if(m&&!m.error)Object.assign(st,m);after&&after();views[cur]()});wire()}
+views.wall=()=>picker('Phone wallpaper','wallpaper',st.wallpapers,st.wallpapers_dir);
+views.ring=()=>picker('Ringtone','ringtone',st.ringtones,st.ringtones_dir,()=>ringStart(false));
+
+/* ---- Future Gadgets: quick toggles under their lab numbers, the Upa collection, power ---- */
+const GADGETS=[['mute','#1 Bit Particle Gun','sound on / off',g=>g.muted?'MUTED':'ON'],
+ ['screenshot','#2 Bamboo Helicam','take a screenshot',()=>'›'],
+ ['syscheck','#3 Mogitate Sensor','is the system lying? (failed units)',()=>'›'],
+ ['air','#4 Moad Snake','airplane mode',g=>g.air?'ON':'OFF'],
+ ['night','#6 Cyalume Saber','night light',g=>g.night==null?'n/a':g.night?'ON':'OFF'],
+ ['eco','#8 PhoneWave (name subject to change)','energy saver',g=>g.eco?'ON':'OFF']];
+views.gadgets=async function(note){sc('');const g=await call('gadgets');
+  pscr.innerHTML=head('Future Gadgets','home')+GADGETS.map(([k,n,d,s])=>`<div class="prow" data-g="${k}" style="white-space:normal;font-size:13px"><span class="st">${s(g)}</span>${n}<br><small>${d}</small></div>`).join('')+
+   (typeof note==='string'?`<div class="prow note">${esc(note)}</div>`:'')+
+   `<div class="prow" data-v="upa">Upa collection ›<span class="st">${g.upa_total||0}</span></div><div class="prow" data-v="power">Power ›</div>`;
+  pscr.querySelectorAll('[data-g]').forEach(r=>r.onclick=async()=>{beep(1000,.04);const x=await call('gadget',{name:r.dataset.g});views.gadgets(x&&x.report)});
+  pscr.querySelectorAll('[data-v]').forEach(r=>r.onclick=()=>{beep(1300,.04);views[r.dataset.v]()});wire()};
+const UPAS=[['green','#62cc5c'],['blue','#559eeb'],['pink','#f285b3'],['metal','#c7ccd6'],['gold','#edbd40']];
+views.upa=async function(){sc('');const g=await call('gadgets'),u=g.upa||{};
+  pscr.innerHTML=head('Upa collection','gadgets')+UPAS.map(([k,c])=>`<div class="prow" style="cursor:default"><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${c};box-shadow:0 0 0 1.5px #111;vertical-align:-2px;margin-right:8px"></span>${k[0].toUpperCase()+k.slice(1)} Upa<span class="st">× ${u[k]||0}</span></div>`).join('')+
+   `<div class="prow note">${g.upa_total?`${g.upa_total} caught.`:'None yet.'} Now and then a capsule drops onto the home screen. Click it before it leaves. Metal and gold ones are rare.</div>`;wire()};
+views.power=function(){sc('');let armed=false;
+  pscr.innerHTML=head('Power','gadgets')+`<div class="prow" data-g="lock">Lock</div><div class="prow" data-g="suspend">Suspend</div><div class="prow" data-g="poweroff">Power off<span class="st">tap twice</span></div>`;
+  pscr.querySelectorAll('[data-g]').forEach(r=>r.onclick=()=>{beep(1000,.04);
+    if(r.dataset.g==='poweroff'&&!armed){armed=true;r.classList.add('sel');r.querySelector('.st').textContent='tap again to power off';return}
+    call('gadget',{name:r.dataset.g})});wire()};
+
+/* ---- inbox: notifications, D-Mails, contacts. Highlighted words are the replies (Phone Trigger). ---- */
+const tfmt=ts=>{const d=new Date(ts*1000),p=n=>String(n).padStart(2,'0');return `${d.getMonth()+1}.${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`};
+views.inbox=async function(){sc('');const r=await call('inbox'),ms=r.mails||[];
+  pscr.innerHTML=head('Mail','home')+`<div class="prow" data-n="1">Write mail ›<span class="st">${(st.drafts||[]).length} draft${(st.drafts||[]).length===1?'':'s'}</span></div>`+
+   (ms.length?ms.map((m,i)=>`<div class="prow ${m.read?'':'unread'}" data-i="${i}">${esc(m.from)}<span class="st">${esc(m.subject)}</span></div>`).join('')+'<div class="prow note">Right-click deletes a mail.</div>'
+    :'<div class="prow note">No mail yet. Notifications, D-Mails from the lock screen and your contacts all arrive here.</div>');
+  pscr.querySelector('[data-n]').onclick=()=>{beep(1300,.04);views.mail()};
+  pscr.querySelectorAll('[data-i]').forEach(r=>{const m=ms[r.dataset.i];r.onclick=()=>{beep(1300,.04);views.read(m.id)};
+    r.oncontextmenu=async e=>{e.preventDefault();await call('mail_delete',{id:m.id});beep(500,.05);views.inbox()}});wire()};
+function kwBody(m){let h=esc(m.body);const used=m.replied!=null,extra=[];
+  (m.replies||[]).forEach((r,i)=>{const k=esc(r.key),at=h.indexOf(k);if(at<0)extra.push(i);else h=h.slice(0,at)+`\x01${i}\x02`+h.slice(at+k.length)});
+  const span=i=>`<span class="kw${used?' used':''}" data-r="${i}">${esc(m.replies[i].key)}</span>`;
+  return h.replace(/\x01(\d+)\x02/g,(x,i)=>span(+i))+(extra.length?'\n\n'+extra.map(span).join(' · '):'')}
+views.read=async function(id){sc('');const m=await call('mail_read',{id});if(!m||m.error)return views.inbox();
+  const rs=m.replies||[],done=m.replied!=null;
+  pscr.innerHTML=head(m.from||'Mail','inbox')+`<div class="mhead"><b>${esc(m.subject)}</b><br>${tfmt(m.ts)}</div><div class="mtext">${kwBody(m)}</div>`+
+   (done?`<div class="sent">${esc(rs[m.replied]?.say||'')}</div>`:rs.length?'<div class="prow note">Pick a highlighted word to reply. You only get one.</div>':'');
+  if(!done)pscr.querySelectorAll('.kw').forEach(k=>k.onclick=async()=>{beep(1200,.08);await call('mail_reply',{id,index:+k.dataset.r});views.read(id)});
+  wire();refresh()};
+window.mailEvent=function(unread,visible){const more=unread>(st.unread||0);st.unread=unread;paintStatus();
+  if(more&&visible&&cur!=='call'){vibrate();ringStart(false)}
+  if(cur==='inbox')views.inbox()};
+
+/* ---- Amadeus rings (a long job ended, the battery is low, it is 3 a.m.) ---- */
+let callT=0,amSeen=false;   /* amSeen: the connection animation plays once per phone opening */
+window.incomingCall=function(){amxClose(null);sc('call');cur='call';clearTimeout(callT);
+  pscr.innerHTML=`<div class="callt">INCOMING CALL</div><img class="callimg" src="${am.images.neutral||'../amadeus/emotions/neutral.webp'}" alt=""><div class="calln">AMADEUS</div><div style="font-size:12px;color:#9cc">Makise Kurisu</div>
+   <div class="callb"><button class="ans">Answer</button><button class="dec">Decline</button></div>`;
+  const end=async ok=>{clearTimeout(callT);ringStop();const r=await call('call_end',{answered:ok});
+    if(ok){if(r&&!r.error)Object.assign(am,r);views.amadeus(true)}else views.home()};
+  pscr.querySelector('.ans').onclick=()=>end(true);pscr.querySelector('.dec').onclick=()=>end(false);
+  ringStart(true);$('#phoneWrap').classList.add('ringing');
+  callT=setTimeout(()=>end(false),30000)};
+
 views.contacts=async function(){sc('');await refresh();const cs=st.contacts||[];
   pscr.innerHTML=head('Contact list','home')+(cs.length?cs.map((c,i)=>`<div class="prow ${i?'':'sel'}" data-i="${i}">${esc(c.name??c)}</div>`).join(''):'<div class="prow note">No contacts. Add them under [phone] contacts in ~/.config/sg-shell/config.toml</div>');
   pscr.querySelectorAll('[data-i]').forEach(r=>r.onclick=()=>{beep(1300,.04);views.contact(cs[r.dataset.i])});wire()};
@@ -193,7 +402,7 @@ views.contact=function(c){sc('');const name=c.name??c;
   pscr.querySelector('[data-w]').onclick=()=>call('whatsapp',{phone:c.phone||''});wire()};
 
 views.mail=async function(d={}){sc('');await refresh();
-  pscr.innerHTML=head('Send Mail','home')+`<div class="mrow"><b>To</b><input id="mt" placeholder="recipient" value="${esc(d.to)}"></div><div class="mrow"><b>Sub</b><input id="ms" placeholder="subject" value="${esc(d.subject)}"></div>
+  pscr.innerHTML=head('Send Mail','inbox')+`<div class="mrow"><b>To</b><input id="mt" placeholder="recipient" value="${esc(d.to)}"></div><div class="mrow"><b>Sub</b><input id="ms" placeholder="subject" value="${esc(d.subject)}"></div>
    <textarea id="mbody" placeholder="Write your mail…">${esc(d.body)}</textarea>
    <div class="mbar"><button class="phbtn" id="sv">Save draft</button><button class="phbtn" id="sd">Send</button><button class="phbtn" id="dl">Drafts (${(st.drafts||[]).length})</button><span id="mn"></span></div>`;
   const cur=()=>({to:$('#mt').value,subject:$('#ms').value,body:$('#mbody').value,id:d.id||''});
@@ -210,12 +419,19 @@ views.drafts=async function(){sc('');await refresh();const ds=st.drafts||[];
 const am={log:[],images:{},pictures:[],emotion:'neutral',picture:'neutral',status:'',busy:false,keys:0,pending:null,facts:[],mode:'ask',model:''};
 const AMMODE={ask:'ask before changing','allow':'change freely','read-only':'read only',off:'no file access'};
 async function amLoad(){const r=await call('amadeus_state');if(r&&!r.error)Object.assign(am,r);return r}
-const amFmt=t=>esc(t).replace(/```\w*\n?([\s\S]*?)```/g,(m,c)=>`<pre>${c.replace(/\n$/,'')}</pre>`);
-function amPaint(){const log=$('#amlog');if(!log)return;
+const STICKERS=['Tutturu♪','El Psy Kongroo','Nullpo','Dr Pepper!','Thanks','…sleepy'];
+const AMLINK={limited:'WEAK SIGNAL · rate-limited',offline:'NO LINK',salieri:'SALIERI · offline copy'};
+const amFmt=t=>{const k=/^\(sticker: (.{1,40})\)$/.exec(String(t??'').trim());return k?`<span class="stk">${esc(k[1])}</span>`:amFmt2(t)};
+const amFmt2=t=>esc(t).replace(/```\w*\n?([\s\S]*?)```/g,(m,c)=>`<pre>${c.replace(/\n$/,'')}</pre>`);
+function amPaint(){if(amxOn)return amxPaint();const log=$('#amlog');if(!log)return;
   const img=$('#amimg'),src=am.images[am.picture]||am.images.neutral||'../amadeus/emotions/neutral.webp';
   if(img.getAttribute('src')!==src)img.src=src;
   $('#amemo').textContent=am.emotion;
-  $('#amst').textContent=am.busy?(am.status||'thinking')+' …':'';
+  $('#amst').textContent=am.busy?(am.status||'thinking')+' …':(AMLINK[am.link]||'');
+  const weak=am.link==='limited'||am.link==='offline';img.classList.toggle('static',weak);$('.amtop').classList.toggle('static',weak);
+  amLogFill(log);
+  $('#amgo').disabled=am.busy}
+function amLogFill(log){
   let h=am.log.map(m=>`<div class="amm ${m.role==='ai'?'ai':m.role==='user'?'user':'sys'}">${amFmt(m.text)}</div>`).join('');
   if(!am.keys)h+=`<div class="amm sys">I need a Google AI Studio API key before I can think. Get a free one at aistudio.google.com/apikey and paste it under ⚙.</div>`;
   else if(!am.log.length)h+=`<div class="amm sys" style="background:#16332b;color:#9cc">Connected. Say something — or ask me to look at a file.</div>`;
@@ -224,22 +440,26 @@ function amPaint(){const log=$('#amlog');if(!log)return;
     <pre>${esc(p.diff).split('\n').map(l=>`<span class="${l[0]==='+'?'add':l[0]==='-'?'del':''}">${l}</span>`).join('\n')}</pre>
     <button class="phbtn" data-ok="1">Allow</button><button class="phbtn" data-ok="">Refuse</button></div>`;
   log.innerHTML=h;log.scrollTop=log.scrollHeight;
-  log.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{beep(b.dataset.ok?1200:500,.06);const r=await call('amadeus_confirm',{id:p.id,allow:!!b.dataset.ok});if(r&&!r.error)Object.assign(am,r);amPaint()});
-  $('#amgo').disabled=am.busy}
-async function amSend(){const i=$('#amtx'),t=i.value.trim();if(!t||am.busy)return;beep(1300,.04);
+  log.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{beep(b.dataset.ok?1200:500,.06);const r=await call('amadeus_confirm',{id:p.id,allow:!!b.dataset.ok});if(r&&!r.error)Object.assign(am,r);amPaint()})}
+async function amSend(sticker){const i=$(amxOn?'#axtx':'#amtx'),t=typeof sticker==='string'?`(sticker: ${sticker})`:i.value.trim();if(!t||am.busy)return;beep(1300,.04);
   const r=await call('amadeus_send',{text:t});
-  if(r.error)am.log.push({role:'sys',text:r.error==='no API key'?'No API key yet — add one under ⚙.':r.error});else{i.value='';Object.assign(am,r)}
+  if(r.error)am.log.push({role:'sys',text:r.error==='no API key'?'No API key yet — add one under ⚙.':r.error});else{if(typeof sticker!=='string')i.value='';Object.assign(am,r)}
   amPaint()}
-views.amadeus=async function(){sc('am');
-  pscr.innerHTML=`<div class="amtop"><img id="amimg" alt=""><div class="aminfo"><b>AMADEUS</b>Makise Kurisu<br><span id="amemo">neutral</span><span id="amst"></span></div>
+views.amadeus=async function(quiet){const rine=st.prefs?.skin==='rine';if(!rine)return amxOpen(quiet);sc('am'+(rine?' rine':''));
+  pscr.innerHTML=(quiet===true||amSeen?'':`<div class="amglitch"><b>AMADEUS SYSTEM</b>Connecting …<br>Viktor Chondria University<br>Brain Science Institute<br>&gt; memory data: Makise Kurisu<br>&gt; link established</div>`)+
+   `<div class="amtop"><img id="amimg" alt=""><div class="aminfo">${rine?'<b>Makise Kurisu</b>RINE · ':'<b>AMADEUS</b>Makise Kurisu<br>'}<span id="amemo">neutral</span><span id="amst"></span></div>
     <div class="amnav"><span data-set="1" title="Amadeus settings">⚙</span><span data-back="home">‹ back</span></div></div>
-   <div id="amlog"></div><div class="amin"><input id="amtx" placeholder="Talk to Amadeus…" autocomplete="off"><button class="phbtn" id="amgo">Send</button></div>`;
-  wire();pscr.querySelector('[data-set]').onclick=()=>{beep(1300,.04);views.amset()};
+   <div id="amlog"></div><div class="stkbar">${STICKERS.map(k=>`<span class="stk">${esc(k)}</span>`).join('')}</div>
+   <div class="amin"><button class="phbtn" id="amstk" title="Stickers">☺</button><input id="amtx" placeholder="Talk to Amadeus…" autocomplete="off"><button class="phbtn" id="amgo">Send</button></div>`;
+  amSeen=true;wire();pscr.querySelector('[data-set]').onclick=()=>{beep(1300,.04);views.amset()};
+  $('#amstk').onclick=()=>{beep(1000,.04);$('.stkbar').classList.toggle('on')};
+  pscr.querySelectorAll('.stkbar .stk').forEach(k=>k.onclick=()=>{$('.stkbar').classList.remove('on');amSend(k.textContent)});
   $('#amgo').onclick=amSend;$('#amtx').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();amSend()}};
   amPaint();await amLoad();amPaint();$('#amtx')?.focus()};
 views.amset=async function(){sc('');await amLoad();
   pscr.innerHTML=head('Amadeus','amadeus')+`<div class="prow note">Thinking: ${esc(am.model)} · ${am.keys} API key${am.keys===1?'':'s'}</div>
    <div class="mrow"><b>Key</b><input id="amkey" type="password" placeholder="paste API key, Enter"></div>
+   <div class="prow" data-x="skin">Chat skin<span class="st">${st.prefs?.skin==='rine'?'RINE':'Amadeus'}</span></div>
    <div class="prow" data-x="mode">File access<span class="st">${AMMODE[am.mode]||am.mode}</span></div>
    <div class="prow" data-x="mem">Memory ›<span class="st">${am.facts.length} note${am.facts.length===1?'':'s'}</span></div>
    <div class="prow" data-x="clear">Clear conversation</div>
@@ -247,20 +467,84 @@ views.amset=async function(){sc('');await amLoad();
    <div class="prow note">Faces: ${esc(am.pictures.join(', '))}. Add more as NAME.webp/png in ${esc(am.emotions_dir||'')} (${esc((am.emotions||[]).join(', '))}).<br>Personality: ${esc(am.personality_file||'')}</div>`;
   $('#amkey').onkeydown=async e=>{if(e.key!=='Enter')return;const r=await call('amadeus_key_add',{key:e.target.value});beep(r.error?400:1200,.07);if(r.error){e.target.value='';e.target.placeholder=r.error}else views.amset()};
   const X={mode:'amadeus_mode',clear:'amadeus_clear',keys:'amadeus_keys_clear'};
-  pscr.querySelectorAll('[data-x]').forEach(r=>r.onclick=async()=>{beep(1000,.04);if(r.dataset.x==='mem')return views.ammem();await call(X[r.dataset.x]);views.amset()});wire()};
+  pscr.querySelectorAll('[data-x]').forEach(r=>r.onclick=async()=>{beep(1000,.04);if(r.dataset.x==='mem')return views.ammem();
+    if(r.dataset.x==='skin'){const m=await call('pref',{key:'skin',value:st.prefs?.skin==='rine'?'amadeus':'rine'});if(m&&!m.error)Object.assign(st,m);else st.prefs={...st.prefs,skin:st.prefs?.skin==='rine'?'amadeus':'rine'};return views.amset()}
+    await call(X[r.dataset.x]);views.amset()});wire()};
 views.ammem=async function(){sc('');await amLoad();
   pscr.innerHTML=head('Memory','amset')+(am.facts.length?am.facts.map(f=>`<div class="prow" style="white-space:normal;font-size:13px" data-f="${esc(f.id)}">${esc(f.text)}</div>`).join('')+'<div class="prow note">What she chose to remember · right-click a note to make her forget it.</div>':'<div class="prow note">Nothing remembered yet. Tell her something worth keeping.</div>');
   pscr.querySelectorAll('[data-f]').forEach(r=>r.oncontextmenu=async e=>{e.preventDefault();await call('amadeus_forget',{id:r.dataset.f});beep(500,.05);views.ammem()});wire()};
 window.amadeusEvent=async function(ev){if(ev.type==='status'){am.status=ev.text;am.busy=true}else{await amLoad();if(ev.type==='done')beep(1100,.06)}amPaint()};
 
-ph.querySelectorAll('.keys div').forEach(d=>d.onclick=()=>{beep(1300,.04);({mail:views.mail,set:views.set,book:views.contacts,menu:views.home})[d.dataset.k]()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!['INPUT','TEXTAREA'].includes(e.target.tagName))call('hide')});
+/* ---- Amadeus, full size (default skin). The phone drops out of sight and Kurisu takes the whole column:
+   glass panel, status pills, her picture changing with each [emotion:...] tag, frosted chat card. ---- */
+const JP={neutral:'通常',happy:'喜び',smile:'微笑み',gentle_smile:'微笑み',smug:'得意げ',thinking:'思考',thinking_2:'思考',surprised:'驚き',
+  embarrassed:'照れ',flustered:'動揺',annoyed:'不機嫌',angry:'怒り',worried:'心配',sad:'悲しみ',serious:'真剣',tired:'疲労'};
+const amx=$('#amx');let amxOn=false,amxT=0,amxFront=0,amxEmo='',amxToastT=0;const amxPre=new Set();
+amx.innerHTML=`<div class="ax-bg"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
+ <svg class="ax-rings" width="381" height="696" viewBox="0 0 381 696" fill="none" stroke="rgba(175,192,218,.42)" stroke-width="1.2">
+  <g><path d="M190 120a210 210 0 0 1 176 96"/><path d="M366 444a210 210 0 0 1-132 92"/><path d="M60 494A210 210 0 0 1 40 190"/></g>
+  <g class="r2"><path d="M190 195a135 135 0 0 1 128 92"/><path d="M300 420a135 135 0 0 1-180 26"/><path d="M62 370a135 135 0 0 1 20-118"/></g>
+  <g><path d="M118 285a80 80 0 0 1 60-40" stroke-opacity=".7"/></g></svg>
+ <div class="ax-fig"><img class="ax-k on" alt=""><img class="ax-k" alt=""></div>
+ <div class="ax-top"><span class="ax-back" title="Back to the phone">‹</span><b>AMADEUS</b><span class="ax-gear" title="Amadeus settings">${I.gear}</span></div>
+ <div class="ax-pills"><span data-p="think" title="Her brain: API keys and model"><i id="axp-think"></i>THINKING</span><span data-p="pers" title="Her character sheet"><i id="axp-pers"></i>PERSONALITY</span><span data-p="mem" title="What she remembers about you"><i id="axp-mem"></i>MEMORY</span></div>
+ <div class="ax-toast"></div>
+ <div class="ax-emo"><span id="axemo">NEUTRAL</span><span id="axjp">通常</span></div>
+ <div class="ax-card"><div id="axlog"></div><div id="axst"></div><div class="stkbar">${STICKERS.map(k=>`<span class="stk">${esc(k)}</span>`).join('')}</div>
+  <div class="ax-in"><button id="axstk" title="Stickers">☺</button><input id="axtx" placeholder="Talk to Kurisu…" autocomplete="off"><button id="axgo" title="Send">➤</button></div></div>
+ <div class="ax-glitch"><b>AMADEUS</b>Viktor Chondria University<br>Brain Science Institute<br>&gt; memory data: Makise Kurisu<br>&gt; link established</div>`;
+const axToast=t=>{const e=amx.querySelector('.ax-toast');e.textContent=t;e.classList.add('on');clearTimeout(amxToastT);amxToastT=setTimeout(()=>e.classList.remove('on'),3500)};
+amx.querySelector('.ax-back').onclick=()=>{beep(700,.04);amxClose('home')};
+amx.querySelector('.ax-gear').onclick=()=>{beep(1300,.04);amxClose('amset')};
+amx.querySelector('[data-p="think"]').onclick=()=>{beep(1300,.04);amxClose('amset')};
+amx.querySelector('[data-p="mem"]').onclick=()=>{beep(1300,.04);amxClose('ammem')};
+amx.querySelector('[data-p="pers"]').onclick=()=>{beep(1000,.04);axToast(`Character sheet: ${am.personality_file||'personality.md'} · faces: ${(am.pictures||[]).join(', ')}`)};
+$('#axstk').onclick=()=>{beep(1000,.04);amx.querySelector('.stkbar').classList.toggle('on')};
+amx.querySelectorAll('.stkbar .stk').forEach(k=>k.onclick=()=>{amx.querySelector('.stkbar').classList.remove('on');amSend(k.textContent)});
+$('#axgo').onclick=amSend;
+$('#axtx').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();amSend()}else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();amxClose('home')}};
+function amxPaint(){
+  const imgs=amx.querySelectorAll('.ax-k'),src=am.images[am.picture]||am.images.neutral||'../amadeus/emotions/neutral.webp';
+  for(const u of Object.values(am.images||{}))if(!amxPre.has(u)){amxPre.add(u);new Image().src=u}
+  if(imgs[amxFront].getAttribute('src')!==src){       // cross-fade to the new face
+    const front=imgs[amxFront],next=imgs[1-amxFront];amxFront=1-amxFront;
+    const swap=()=>{next.classList.add('on');front.classList.remove('on')};
+    next.onload=swap;next.src=src;if(next.complete&&next.naturalWidth)swap()}
+  const emo=am.emotion||'neutral',e=amx.querySelector('.ax-emo');
+  if(emo!==amxEmo){amxEmo=emo;$('#axemo').textContent=emo.replace(/_\d+$/,'').replace(/_/g,' ').toUpperCase();$('#axjp').textContent=JP[emo]||'';
+    e.classList.remove('flash');void e.offsetWidth;e.classList.add('flash')}
+  const weak=am.link==='limited'||am.link==='offline';
+  amx.classList.toggle('weak',weak);amx.classList.toggle('busy',!!am.busy);
+  $('#axp-think').className=!am.keys||weak?'bad':am.busy?'busy':'on';
+  $('#axp-pers').className='on';$('#axp-mem').className=(am.facts||[]).length?'on':'';
+  $('#axst').textContent=am.busy?(am.status||'thinking')+' …':(AMLINK[am.link]||'');
+  amLogFill($('#axlog'));$('#axgo').disabled=am.busy}
+async function amxOpen(quiet){
+  clearTimeout(amxT);const first=!amxOn;amxOn=true;cur='amadeus';
+  if(first){
+    ph.classList.remove('open','back');ph.classList.add('closing');call('region',{mode:'amadeus'});
+    amx.classList.remove('out','show');amx.classList.toggle('glitch',!(quiet===true||amSeen));void amx.offsetWidth;
+    amxT=setTimeout(()=>{amx.classList.add('show');$('#axtx').focus()},230);snd('amadeus_open',()=>beep(1250,.06))}
+  amSeen=true;amxPaint();await amLoad();if(amxOn)amxPaint()}
+function amxClose(next){if(!amxOn)return;amxOn=false;clearTimeout(amxT);
+  amx.classList.remove('show');amx.classList.add('out');call('region',{mode:'phone'});
+  amxT=setTimeout(()=>amx.classList.remove('out','glitch'),400);
+  if(next===false)return;                         // the whole phone is going away
+  ph.classList.remove('closing','open');void ph.offsetWidth;ph.classList.add('back');
+  if(next)views[next]()}
+
+/* every view remembers that it is the one on screen */
+for(const k of Object.keys(views)){const f=views[k];views[k]=function(...a){cur=k;return f.apply(this,a)}}
+ph.querySelectorAll('.keys div').forEach(d=>d.onclick=()=>{beep(1300,.04);views[{mail:'inbox',set:'set',book:'contacts',menu:'home'}[d.dataset.k]]()});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(amxOn)return amxClose('home');if(!['INPUT','TEXTAREA'].includes(e.target.tagName))call('hide')});
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('.prow'))e.preventDefault()});
 
 /* called by sg-phone */
 window.phoneOpen=function(scale){if(scale)document.documentElement.style.setProperty('--s',scale);
-  ph.classList.remove('closing','open');void ph.offsetWidth;ph.classList.add('open');beep(1500,.08);views.home();refresh()};
-window.phoneClose=function(){ph.classList.remove('open');ph.classList.add('closing');beep(600,.08)};
+  if(amxOn){amxOn=false;clearTimeout(amxT);amx.classList.remove('show','out','glitch');call('region',{mode:'phone'})}
+  ph.classList.remove('closing','open');void ph.offsetWidth;ph.classList.add('open');amSeen=false;snd('phone_open',()=>beep(1500,.08));views.home();
+  refresh().then(()=>{if(cur==='home')views.home()})};
+window.phoneClose=function(){clearTimeout(callT);ringStop();amxClose(false);ph.classList.remove('open');ph.classList.add('closing');snd('phone_close',()=>beep(600,.08))};
 if(!window.webkit?.messageHandlers?.sg)window.phoneOpen(Math.min(innerHeight/720,2));
 </script>
 </body>

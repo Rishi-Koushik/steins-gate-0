@@ -3,6 +3,7 @@
 
   sg-phone            toggle (Alt+P)
   sg-phone --show | --hide | --whatsapp
+  sg-phone --call REASON [DETAIL]      Amadeus rings: job "CMD|SECONDS|EXIT", battery PERCENT, late, test
 
 The phone UI is apps/phone/index.html in a transparent WebKitGTK window; this process is
 the native side (NetworkManager, rfkill, power profiles, brightness, volume, drafts).
@@ -30,10 +31,21 @@ from gi.repository import Gtk, Gdk, Gio, GLib, WebKit, JavaScriptCore
 import cairo
 
 import sg_common as C
+import sg_mailbox as M
 
 REF_H = 720
 STAGE_W = 405          # reference-canvas width of the phone column (354 px phone + 51 px margin)
 DRAFTS = C.DATA_DIR / "drafts"
+PHONE_DIR = C.DATA_DIR / "phone"
+PREFS = PHONE_DIR / "prefs.json"
+WALLPAPERS = PHONE_DIR / "wallpapers"        # the owner's pictures for the phone's home screen
+RINGTONES = PHONE_DIR / "ringtones"          # the owner's ringtones (mail, calls)
+SOUND_PACK = C.DATA_DIR / "sounds" / "pack"  # optional event sounds: phone_open, phone_close, mail, call, key
+UPA = C.DATA_DIR / "upa" / "collection.json"
+IMAGE_TYPES = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+AUDIO_TYPES = (".ogg", ".oga", ".opus", ".mp3", ".wav", ".flac", ".m4a")
+PREF_DEFAULTS = {"wallpaper": "", "ringtone": "", "skin": "amadeus"}
+NIGHT_LIGHT = ("org.gnome.settings-daemon.plugins.color", "night-light-enabled")
 A11Y = {
     "large_text": None,  # handled via text-scaling-factor
     "high_contrast": ("org.gnome.desktop.a11y.interface", "high-contrast"),
@@ -58,6 +70,29 @@ def spawn(*argv):
         return False
 
 
+def files_in(folder, types):
+    try:
+        return sorted(f for f in folder.iterdir() if f.suffix.lower() in types and f.is_file())
+    except OSError:
+        return []
+
+
+def job_summary(detail):
+    """'make -j8|192|0' → ('job' | 'job-failed', 'make -j8 finished after 3 min 12 s.')"""
+    cmd, _, rest = detail.rpartition("|") if detail.count("|") >= 2 else (detail, "", "")
+    cmd, _, secs = cmd.rpartition("|") if rest != "" else (detail, "", "")
+    try:
+        secs, status = int(secs), int(rest)
+    except ValueError:
+        return "job", f"{detail or 'The job'} has finished."
+    took = f"{secs // 60} min {secs % 60} s" if secs >= 60 else f"{secs} s"
+    cmd = " ".join(cmd.split())
+    cmd = cmd if len(cmd) <= 48 else cmd[:45] + "…"
+    if status:
+        return "job-failed", f"`{cmd}` stopped after {took} with exit code {status}."
+    return "job", f"`{cmd}` finished after {took}."
+
+
 def parse_contact(entry):
     """'Name <mail@x> +4412345' → {name, email, phone}"""
     email = re.search(r"<([^>]+)>", entry)
@@ -74,6 +109,97 @@ class Backend:
         self.cfg = cfg
         self.iface = Gio.Settings.new("org.gnome.desktop.interface")
         self._backlight = None
+        src = Gio.SettingsSchemaSource.get_default()
+        self.night = Gio.Settings.new(NIGHT_LIGHT[0]) if src and src.lookup(NIGHT_LIGHT[0], True) else None
+
+    # -- phone preferences (wallpaper, ringtone, chat skin) --
+    def prefs(self):
+        prefs = dict(PREF_DEFAULTS)
+        try:
+            saved = json.loads(PREFS.read_text())
+            prefs.update({k: str(v) for k, v in saved.items() if k in prefs})
+        except (OSError, ValueError, AttributeError):
+            pass
+        return prefs
+
+    def set_pref(self, key, value):
+        if key not in PREF_DEFAULTS:
+            return
+        value = str(value or "")
+        # wallpapers and ringtones are picked from their folders by file name, nothing else
+        folder = {"wallpaper": WALLPAPERS, "ringtone": RINGTONES}.get(key)
+        if folder is not None and value and not (folder / Path(value).name).is_file():
+            return
+        if key == "skin" and value not in ("amadeus", "rine"):
+            return
+        prefs = self.prefs()
+        prefs[key] = Path(value).name if folder is not None else value
+        PHONE_DIR.mkdir(parents=True, exist_ok=True)
+        PREFS.write_text(json.dumps(prefs))
+
+    def media(self):
+        """What the owner has put in the wallpaper / ringtone folders and the sound pack."""
+        prefs = self.prefs()
+        wall, ring = WALLPAPERS / prefs["wallpaper"], RINGTONES / prefs["ringtone"]
+        return {
+            "prefs": prefs,
+            "wallpapers": [f.name for f in files_in(WALLPAPERS, IMAGE_TYPES)],
+            "ringtones": [f.name for f in files_in(RINGTONES, AUDIO_TYPES)],
+            "wallpaper_uri": wall.as_uri() if prefs["wallpaper"] and wall.is_file() else "",
+            "ringtone_uri": ring.as_uri() if prefs["ringtone"] and ring.is_file() else "",
+            "ringtones_dir": str(RINGTONES), "wallpapers_dir": str(WALLPAPERS), "sound_pack_dir": str(SOUND_PACK),
+            "sounds": {f.stem: f.as_uri() for f in files_in(SOUND_PACK, AUDIO_TYPES)},
+        }
+
+    # -- Future Gadgets: the quick toggles under their lab names --
+    def gadgets(self):
+        muted = "MUTED" in run("wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@")
+        try:
+            upa = json.loads(UPA.read_text())
+            upa = upa if isinstance(upa, list) else []
+        except (OSError, ValueError):
+            upa = []
+        counts = {}
+        for u in upa:
+            kind = str(u.get("kind", "green")) if isinstance(u, dict) else "green"
+            counts[kind] = counts.get(kind, 0) + 1
+        return {"muted": muted, "air": self.rfkill("all"),
+                "night": self.night.get_boolean(NIGHT_LIGHT[1]) if self.night else None,
+                "eco": run("powerprofilesctl", "get") == "power-saver",
+                "upa": counts, "upa_total": len(upa)}
+
+    def gadget(self, name):
+        if name == "mute":
+            run("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle")
+        elif name == "night" and self.night:
+            self.night.set_boolean(NIGHT_LIGHT[1], not self.night.get_boolean(NIGHT_LIGHT[1]))
+        elif name == "air":
+            self.set("air", not self.rfkill("all"))
+        elif name == "eco":
+            self.set("eco", run("powerprofilesctl", "get") != "power-saver")
+        elif name == "screenshot":
+            # only the shell can open its screenshot tool: the extension watches this file
+            C.RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+            (C.RUNTIME_DIR / "shell-cmd").write_text("screenshot")
+        elif name == "syscheck":
+            failed = [l.split()[0] for l in run("systemctl", "--failed", "--no-legend", "--plain").splitlines() if l.split()]
+            failed += [l.split()[0] + " (user)" for l in
+                       run("systemctl", "--user", "--failed", "--no-legend", "--plain").splitlines() if l.split()]
+            try:
+                load = Path("/proc/loadavg").read_text().split()[0]
+            except OSError:
+                load = "?"
+            return {"report": (f"{len(failed)} failed unit{'s' if len(failed) != 1 else ''}: " + ", ".join(failed[:6])
+                               if failed else "No failed units. The machine is telling the truth.") + f" · load {load}"}
+        elif name == "lock":
+            spawn("loginctl", "lock-session")
+        elif name == "suspend":
+            spawn("systemctl", "suspend")
+        elif name == "poweroff":
+            spawn("systemctl", "poweroff")
+        else:
+            return {"error": f"unknown gadget {name}"}
+        return {}
 
     # -- brightness: read sysfs, write through logind (no root needed for the active session).
     #    GNOME 50 keeps its own slider inside the shell, with no public D-Bus API.
@@ -163,6 +289,8 @@ class Backend:
             "a11y": a11y,
             "contacts": [parse_contact(c) for c in C.cfg_get(self.cfg, "phone", "contacts", [])],
             "drafts": self.drafts(),
+            "unread": M.unread(),
+            **self.media(),
         }
 
     def set(self, key, value):
@@ -251,6 +379,10 @@ class Phone(Gtk.Application):
         self.cfg = C.load_config()
         self.backend = Backend(self.cfg)
         self.amadeus = None
+        self.call = None              # the call that is ringing: {"reason", "raw", "segments"}
+        self.mail_monitor = None
+        self._mail_ping = 0
+        self.region = "phone"         # "phone" or "amadeus" (the big glass Kurisu panel)
 
     def do_command_line(self, cl):
         args = cl.get_arguments()[1:]
@@ -259,10 +391,14 @@ class Phone(Gtk.Application):
             self.hold_once()
             self.whatsapp()
             return 0
+        if op == "call" and not self.wants_calls():
+            return 0
         first = self.win is None
         if first:
             self.build()
-        if op == "toggle":
+        if op == "call":
+            self.ring(args[1] if len(args) > 1 else "test", args[2] if len(args) > 2 else "")
+        elif op == "toggle":
             self.set_shown(True if first else not self.win.get_visible())
         elif op == "show":
             self.set_shown(True)
@@ -303,7 +439,9 @@ class Phone(Gtk.Application):
         ucm = WebKit.UserContentManager()
         ucm.register_script_message_handler_with_reply("sg", None)
         ucm.connect("script-message-with-reply-received::sg", self.on_message)
-        view = self.view = WebKit.WebView(user_content_manager=ucm)
+        # ringtones and event sounds play without a click first
+        policies = WebKit.WebsitePolicies(autoplay=WebKit.AutoplayPolicy.ALLOW)
+        view = self.view = WebKit.WebView(user_content_manager=ucm, website_policies=policies)
         view.set_background_color(Gdk.RGBA(0, 0, 0, 0))
         s = view.get_settings()
         s.set_enable_developer_extras(False)
@@ -313,6 +451,59 @@ class Phone(Gtk.Application):
         view.load_uri((C.DATA_DIR / "apps" / "phone" / "index.html").as_uri())
         self.win.set_child(view)
         self.win.connect("map", lambda *_: GLib.idle_add(self.update_input_region))
+        self.watch_inbox()
+
+    # ---- new mail: the page vibrates / rings while the phone process is alive ----
+    def watch_inbox(self):
+        try:
+            M.INBOX.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self.mail_monitor = Gio.File.new_for_path(str(M.INBOX)).monitor_directory(Gio.FileMonitorFlags.NONE, None)
+            self.mail_monitor.connect("changed", self.on_inbox_changed)
+        except GLib.Error:
+            self.mail_monitor = None
+
+    def on_inbox_changed(self, _mon, file, _other, event):
+        # a new mail is written as ID.tmp and renamed to ID.json; reading one rewrites it the same way
+        if event not in (Gio.FileMonitorEvent.CREATED, Gio.FileMonitorEvent.RENAMED,
+                         Gio.FileMonitorEvent.MOVED_IN, Gio.FileMonitorEvent.CHANGES_DONE_HINT):
+            return
+        if not self._mail_ping:
+            self._mail_ping = GLib.timeout_add(400, self._mail_arrived)
+
+    def _mail_arrived(self):
+        self._mail_ping = 0
+        unread = M.unread()
+        if self.loaded:
+            self.js(f"window.mailEvent&&mailEvent({unread},{json.dumps(self.win.get_visible())})")
+        return False
+
+    # ---- Amadeus calls ----
+    def wants_calls(self):
+        amadeus = self.cfg.get("amadeus", {})
+        return not isinstance(amadeus, dict) or amadeus.get("calls", True) is not False
+
+    def ring(self, reason, detail=""):
+        if self.call:
+            return
+        if reason == "job":
+            reason, detail = job_summary(detail)
+        self.call = {"reason": reason, **self.amadeus_ctl().call_line(reason, detail)}
+        self.win.present()
+        if self.loaded:
+            self._show_call()
+
+    def _show_call(self):
+        self.js(f"phoneOpen({self.scale:.4f});incomingCall({json.dumps({'reason': self.call['reason']})})")
+
+    def end_call(self, answered):
+        call, self.call = self.call, None
+        if not call:
+            return {}
+        if answered:
+            return self.amadeus_ctl().handle("amadeus_call_answer", {"raw": call["raw"]})
+        text = " ".join(seg["text"] for seg in call["segments"])
+        M.send("Amadeus", "Missed call", text, kind="call")
+        return {}
 
     def update_input_region(self):
         """Clicks outside the phone body fall through to the windows underneath."""
@@ -320,8 +511,14 @@ class Phone(Gtk.Application):
         if surface:
             s = self.scale
             w, h = self.win.get_width(), self.win.get_height()
-            x = w - int((51 + 354) * s)
-            region = cairo.Region(cairo.RectangleInt(max(0, x), int(10 * s), int(354 * s), h - int(10 * s)))
+            if self.region == "amadeus":
+                # #amx in phone/index.html: right 12, top 12, 381 x 696 on the 405 x 720 stage
+                x = w - int((12 + 381) * s)
+                rect = cairo.RectangleInt(max(0, x), int(12 * s), int(381 * s), min(h, int(696 * s)))
+            else:
+                x = w - int((51 + 354) * s)
+                rect = cairo.RectangleInt(max(0, x), int(10 * s), int(354 * s), h - int(10 * s))
+            region = cairo.Region(rect)
             surface.set_input_region(region)
         return False
 
@@ -333,7 +530,9 @@ class Phone(Gtk.Application):
             GLib.timeout_add(150, self._open_if_visible)
 
     def _open_if_visible(self):
-        if self.win.get_visible():
+        if self.call:
+            self._show_call()
+        elif self.win.get_visible():
             self.js(f"phoneOpen({self.scale:.4f})")
         return False
 
@@ -355,6 +554,7 @@ class Phone(Gtk.Application):
             if self.loaded:
                 self.js(f"phoneOpen({self.scale:.4f})")
         elif self.win.get_visible():
+            self.end_call(False)      # closing the phone while it rings is a missed call
             self.js("phoneClose()")
             GLib.timeout_add(430, lambda: (self.win.set_visible(False), False)[1])
 
@@ -396,6 +596,32 @@ class Phone(Gtk.Application):
             return b.draft_delete(msg.get("id", ""))
         if cmd == "mail_send":
             return b.mail_send(msg.get("to", ""), msg.get("subject", ""), msg.get("body", ""))
+        if cmd == "inbox":
+            return {"mails": M.listing()}
+        if cmd == "mail_read":
+            return M.load(msg.get("id", ""))
+        if cmd == "mail_delete":
+            return M.delete(msg.get("id", ""))
+        if cmd == "mail_reply":
+            r = M.reply(msg.get("id", ""), msg.get("index"))
+            answer = r.pop("answer", None)
+            if answer:      # they write back a little later, like in the game
+                GLib.timeout_add_seconds(6, lambda: (M.send(answer["from"], answer["subject"], answer["body"],
+                                                            kind="chara"), False)[1])
+            return r.get("mail", r)
+        if cmd == "pref":
+            b.set_pref(str(msg.get("key", "")), msg.get("value"))
+            return b.media()
+        if cmd == "gadgets":
+            return b.gadgets()
+        if cmd == "gadget":
+            name = str(msg.get("name", ""))
+            if name in ("screenshot", "lock", "suspend", "poweroff"):
+                self.set_shown(False)
+            r = b.gadget(name)
+            return r if r else b.gadgets()
+        if cmd == "call_end":
+            return self.end_call(bool(msg.get("answered")))
         if cmd == "whatsapp":
             self.whatsapp(re.sub(r"\D", "", str(msg.get("phone", ""))))
             return {}
@@ -406,6 +632,10 @@ class Phone(Gtk.Application):
             return {}
         if cmd == "hide":
             self.set_shown(False)
+            return {}
+        if cmd == "region":
+            self.region = "amadeus" if msg.get("mode") == "amadeus" else "phone"
+            self.update_input_region()
             return {}
         return {"error": f"unknown command {cmd}"}
 

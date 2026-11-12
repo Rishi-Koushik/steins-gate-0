@@ -1,0 +1,61 @@
+{
+  "login": {
+    "from": "Mayuri",
+    "cooldown": 3600,
+    "mails": [
+      {
+        "subject": "Tutturu~♪",
+        "body": "Tutturu~♪ Mayushii here! You turned the laptop on, so Mayushii is saying hello. Did you have breakfast? Mayushii brought bananas to the lab, and a new Upa is out today too!",
+        "replies": [
+          {"key": "Tutturu", "say": "Tutturu to you too.", "answer": "Ehehe, you said it back! Mayushii is happy now. Work hard today~♪"},
+          {"key": "bananas", "say": "Don't put them in the microwave.", "answer": "Eeeh? But Daru-kun said they come out all green and wobbly and Mayushii wants to see that..."},
+          {"key": "Upa", "say": "I'll look out for one.", "answer": "Really? If a metal one drops on your screen, catch it for Mayushii, okay? They are super rare!"}
+        ]
+      },
+      {
+        "subject": "Good morning from the lab",
+        "body": "Tutturu~♪ Mayushii is sewing a new cosplay today. Okarin is shouting at his phone again but nobody is on the other end. Don't stay up too late on the computer, okay?",
+        "replies": [
+          {"key": "cosplay", "say": "Who is it for this time?", "answer": "It's a secret! But Mayushii thinks it would look very good on Lukako~♪"},
+          {"key": "phone", "say": "He does that.", "answer": "Mayushii knows. Mayushii thinks he does it when he's nervous. Don't tell him Mayushii said that!"}
+        ]
+      }
+    ]
+  },
+  "build-failed": {
+    "from": "Daru",
+    "cooldown": 600,
+    "mails": [
+      {
+        "subject": "that build tho",
+        "body": "Saw `{detail}` die just now. Bro. Read the first error, not the last forty. If it's a missing semicolon I'm telling everyone. And it's super hacker, not hacka.",
+        "replies": [
+          {"key": "first error", "say": "Reading it now.", "answer": "Good. 90% of the time the rest is the compiler panicking about the first one. You got this. Probably."},
+          {"key": "super hacker", "say": "Then fix it for me, super hacker.", "answer": "My rate is one Faris-tan autographed coaster per bug. No coaster, no hax. Those are the rules, I don't make them. (I do.)"}
+        ]
+      },
+      {
+        "subject": "lol",
+        "body": "`{detail}` → nonzero exit. Classic. Clean build first, then check what you changed last. If it worked yesterday, git diff is your friend. I'm in the middle of an eroge, so this is all the support you get.",
+        "replies": [
+          {"key": "git diff", "say": "Checking the diff.", "answer": "Atta boy. If the diff is 2000 lines, that's your problem right there btw."},
+          {"key": "eroge", "say": "Priorities, Daru.", "answer": "These ARE my priorities. A gentleman finishes the route he started."}
+        ]
+      }
+    ]
+  },
+  "battery-low": {
+    "from": "Faris",
+    "cooldown": 1800,
+    "mails": [
+      {
+        "subject": "Nya?! {detail}%!",
+        "body": "Nyan nyan! Faris's cat eyes can see it from here: your battery is at {detail}%! The seal on your laptop's life force is about to break, nya. Find the sacred charger before the darkness comes!",
+        "replies": [
+          {"key": "charger", "say": "Plugging in.", "answer": "The seal holds, nya! Faris will report to the cat council that the world was saved today~"},
+          {"key": "darkness", "say": "Let it come. I've saved my work.", "answer": "Such resolve, nya... but Faris has seen that worldline and it ends with you rewriting everything. Plug it in!"}
+        ]
+      }
+    ]
+  }
+}

@@ -39,6 +39,14 @@ class ApiError(Exception):
     pass
 
 
+class NetworkError(ApiError):
+    """The API could not be reached at all (offline)."""
+
+
+class RateLimited(ApiError):
+    """Every key is over its quota for the moment."""
+
+
 # ---------------------------------------------------------------- keys
 def load_keys():
     keys = []
@@ -117,7 +125,7 @@ class Gemini:
                 elif e.code in (429, 401, 403) or (e.code == 400 and "API key" in str(detail)):
                     self.key_index += 1          # next key
                     if attempt >= len(keys) - 1 and e.code == 429:
-                        raise ApiError("every API key is rate-limited right now (free tier). "
+                        raise RateLimited("every API key is rate-limited right now (free tier). "
                                        "Wait a minute or add another key. " + last)
                 elif e.code >= 500:
                     time.sleep(2)
@@ -126,7 +134,67 @@ class Gemini:
             except (urllib.error.URLError, TimeoutError, OSError) as e:
                 last = f"network: {e}"
                 time.sleep(1)
-        raise ApiError(last)
+        raise (NetworkError if last.startswith("network:") else ApiError)(last)
+
+
+# ---------------------------------------------------------------- Salieri: the offline stand-in
+class Salieri:
+    """A local model (Ollama) that answers when Amadeus cannot be reached: no network, or no API key.
+    Plain conversation only: no file tools. [amadeus.salieri] enabled = "auto" | "off"."""
+
+    def __init__(self, cfg=None):
+        cfg = cfg or {}
+        enabled = cfg.get("enabled", "auto")
+        self.enabled = enabled is not False and str(enabled).lower() not in ("off", "false", "no")
+        self.url = str(cfg.get("url") or os.environ.get("AMADEUS_SALIERI_URL") or "http://127.0.0.1:11434").rstrip("/")
+        self.model = str(cfg.get("model") or "")
+
+    def _req(self, path, body=None, timeout=4):
+        req = urllib.request.Request(
+            f"{self.url}{path}", data=json.dumps(body).encode() if body is not None else None,
+            headers={"Content-Type": "application/json"}, method="POST" if body is not None else "GET")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+
+    def pick_model(self):
+        if not self.model:
+            models = [m.get("name", "") for m in self._req("/api/tags").get("models", [])]
+            models = [m for m in models if m and "embed" not in m]
+            if not models:
+                raise ApiError("the local model server has no model installed (ollama pull …)")
+            self.model = models[0]
+        return self.model
+
+    def chat(self, system, messages):
+        """messages: [{"role": "user" | "model", "text": …}] → reply text. Raises ApiError."""
+        if not self.enabled:
+            raise ApiError("Salieri is switched off")
+        try:
+            body = {"model": self.pick_model(), "stream": False, "options": {"temperature": 0.9},
+                    "messages": [{"role": "system", "content": system}] + [
+                        {"role": "assistant" if m["role"] == "model" else "user", "content": m["text"]}
+                        for m in messages]}
+            text = (self._req("/api/chat", body, timeout=180).get("message") or {}).get("content", "").strip()
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+            raise ApiError(f"no local model at {self.url} ({e})")
+        if not text:
+            raise ApiError("the local model gave no answer")
+        return text
+
+
+def think_offline(salieri, memory, user_name, history_messages=24, extra=""):
+    """Answer the newest user message with the local model. Returns the raw reply text."""
+    system = "\n\n".join(filter(None, [
+        personality.user_personality(user_name),
+        personality.emotion_rules(),
+        memory.facts_prompt(),
+        extra,
+        "## Now\nThe link to the Amadeus servers is down. You are running as Salieri, the small offline copy "
+        "on this laptop: you can talk, but you cannot open or change files until the link is back. "
+        "Say so if the owner asks for that. Keep replies short. "
+        f"It is {time.strftime('%A %Y-%m-%d %H:%M')}. The owner is {user_name}.",
+    ]))
+    return salieri.chat(system, memory.recent(history_messages))
 
 
 # ---------------------------------------------------------------- file tools
@@ -378,15 +446,16 @@ class Tools:
 
 
 # ---------------------------------------------------------------- one turn
-def think(gemini, memory, tools, user_name, history_messages=24):
+def think(gemini, memory, tools, user_name, history_messages=24, extra=""):
     """Answer the newest user message (already in memory). Returns the raw reply text."""
-    system = "\n\n".join([
+    system = "\n\n".join(filter(None, [
         personality.user_personality(user_name),
         personality.emotion_rules(),
         memory.facts_prompt(),
         TOOL_RULES if tools.mode != "off" else "",
+        extra,
         f"## Now\nIt is {time.strftime('%A %Y-%m-%d %H:%M')}. The owner is {user_name}; their home folder is {C.HOME}.",
-    ])
+    ]))
     contents = []
     for m in memory.recent(history_messages):
         if contents and contents[-1]["role"] == m["role"]:      # e.g. a message whose answer failed

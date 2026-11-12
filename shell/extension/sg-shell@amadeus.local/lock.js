@@ -10,6 +10,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {dataPath, RUNTIME_DIR} from './config.js';
 import {Meter} from './nixie.js';
+import {arrivedDmails, deliverDmail, saveDmail, dmailCount, MAX_DMAILS, packSound, playSound} from './mailbox.js';
 
 const REF_W = 1280, REF_H = 720;
 const IT = [
@@ -20,6 +21,10 @@ const SUB = [['LOAD', 394, 577, 96, 32], ['QUICK LOAD', 540, 577, 206, 32]];
 const BRACKET = [[372, 532, 22, 2], [372, 532, 2, 60], [372, 591, 22, 2]];
 const SANS = 'Adwaita Sans, Inter, sans-serif';
 const MENU_FONT = 'Archivo Black, Impact, sans-serif';
+// where a wrong PIN lands for a moment: Alpha-attractor worldlines
+const WRONG_WORLDLINES = ['0.571024', '0.571015', '0.523299', '0.456903', '0.409420', '0.337187'];
+const DMAIL_FROM = ['boot', 'menu', 'sub', 'users', 'pin'];   // stages where Tab opens the D-Mail composer
+const enc = new TextEncoder();
 
 export class LockScreen {
     constructor(cfg) {
@@ -33,6 +38,9 @@ export class LockScreen {
         this._busy = false;
         this.authenticated = false;
         this._hookedVerifier = null;
+        this._dmText = '';
+        this._dmReturn = 'menu';
+        this._incoming = [];
     }
 
     // ---------- lifecycle ----------
@@ -71,6 +79,12 @@ export class LockScreen {
 
         this._buildMenu();
         this._buildPanels();
+        // D-Mails typed on the lock screen during an earlier boot arrive now
+        try {
+            if (this._cfg.dmail.enabled) this._incoming = arrivedDmails();
+        } catch (e) {
+            console.warn(`[sg-shell] D-Mail inbox unreadable: ${e}`);
+        }
 
         dialog.add_child(this.actor);
         this._capId = dialog.connect('captured-event', (_a, ev) => this._onCaptured(ev));
@@ -192,7 +206,7 @@ export class LockScreen {
     }
 
     _stopMedia() {
-        for (const k of ['_loop', '_music', '_boot']) {
+        for (const k of ['_loop', '_music', '_boot', '_amb']) {
             try { this[k]?.destroy(); } catch {}
             this[k] = null;
         }
@@ -201,10 +215,68 @@ export class LockScreen {
 
     _beep(name) {
         if (!this._lc.sounds) return;
+        // sounds/pack/NAME.* (the owner's sound pack) replaces the bundled beep of the same name
+        playSound(name, name);
+    }
+
+    // Optional looped room tone from the sound pack (sounds/pack/ambience.*), e.g. cicadas or CRT hum.
+    async _startAmbience() {
+        if (this._amb || this._ambStarting || this._dark()) return;
+        const file = packSound('ambience');
+        if (!file) return;
+        this._ambStarting = true;
         try {
-            const f = Gio.File.new_for_path(dataPath('sounds', `${name}.ogg`));
-            global.display.get_sound_player().play_from_file(f, 'sg-shell', null);
-        } catch {}
+            const {Player} = await import('./video.js');
+            if (!this.actor || this._amb || this._dark() || this._stage === 'boot' || this._stage === 'power') return;
+            this._amb = new Player({
+                file, video: false, loop: true, volume: Number(this._lc.ambience_volume) || 0.5,
+            });
+            this._amb.play();
+        } catch (e) {
+            console.warn(`[sg-shell] ambience unavailable: ${e}`);
+        } finally {
+            this._ambStarting = false;
+        }
+    }
+
+    // ---------- Lab Member badge ----------
+    _labNo() {
+        let n = Number(this._lc.lab_member_no) || 0;
+        if (n < 1) {
+            try { n = Gio.Credentials.new().get_unix_user() - 999; } catch { n = 1; }
+        }
+        return String(Math.max(1, Math.min(999, Math.floor(n)))).padStart(3, '0');
+    }
+
+    // a round pin badge: brass rim, gear ring, the member number in the middle
+    _labBadge(size, no) {
+        const box = new St.Widget({width: size, height: size, layout_manager: new Clutter.BinLayout()});
+        const art = new St.DrawingArea({width: size, height: size});
+        art.connect('repaint', () => {
+            const cr = art.get_context();
+            const [w, h] = art.get_surface_size();
+            const c = w / 2, r = Math.min(w, h) / 2 - 1;
+            cr.arc(c, c, r, 0, 2 * Math.PI); cr.setSourceRGBA(0.72, 0.53, 0.18, 1); cr.fill();
+            cr.arc(c, c, r * 0.86, 0, 2 * Math.PI); cr.setSourceRGBA(0.10, 0.063, 0.024, 1); cr.fill();
+            cr.setSourceRGBA(0.97, 0.65, 0, 0.9);
+            cr.setLineWidth(Math.max(1, r * 0.09));
+            for (let i = 0; i < 12; i++) {
+                const a = i * Math.PI / 6;
+                cr.moveTo(c + Math.cos(a) * r * 0.66, c + Math.sin(a) * r * 0.66);
+                cr.lineTo(c + Math.cos(a) * r * 0.80, c + Math.sin(a) * r * 0.80);
+            }
+            cr.stroke();
+            cr.setLineWidth(Math.max(1, r * 0.05));
+            cr.arc(c, c, r * 0.64, 0, 2 * Math.PI); cr.stroke();
+            cr.$dispose();
+        });
+        box.add_child(art);
+        box.add_child(new St.Label({
+            text: no, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true, y_expand: true,
+            style: `font-family: ${SANS}; font-weight: 800; font-size: ${Math.round(size * 0.27)}px; color: #f7a600;`,
+        }));
+        return box;
     }
 
     // ---------- widgets ----------
@@ -316,6 +388,9 @@ export class LockScreen {
         const h3 = `font-family: ${SANS}; font-weight: 700; font-size: ${px(20)}px; letter-spacing: ${px(1.6)}px; color: #f7a600; padding-bottom: ${px(6)}px;`;
         const pst = `font-family: ${SANS}; font-size: ${px(14)}px; color: #cfe; padding-bottom: ${px(12)}px;`;
         const name = this._lc.display_name || GLib.get_user_name();
+        const lab = this._lc.lab_member !== false;
+        const labNo = this._labNo();
+        const labName = this._lc.lab_member_name || name;
 
         // --- user list ---
         this._users = this._panel(580);
@@ -331,7 +406,7 @@ export class LockScreen {
                 `border: 1px solid #a35a00; text-align: center; padding-top: ${px(8)}px;`,
         }));
         const meta = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL});
-        for (const [t, st] of [['SAVE DATA 01', `font-size: ${px(12)}px; color: #c98a3a;`], [name, `font-size: ${px(17)}px; color: #fff;`]]) {
+        for (const [t, st] of [[lab ? `LAB MEM No.${labNo} · SAVE DATA 01` : 'SAVE DATA 01', `font-size: ${px(12)}px; color: #c98a3a;`], [name, `font-size: ${px(17)}px; color: #fff;`]]) {
             const l = new St.Label({text: t, style: `font-family: ${SANS}; ${st}`});
             l.clutter_text.ellipsize = 0;
             meta.add_child(l);
@@ -348,6 +423,23 @@ export class LockScreen {
         this._pin = this._panel(790);
         this._pin.set_pivot_point(0.5, 0.5);
         this._pin.add_child(this._text('CONTINUE — LOAD SAVE DATA', h3 + 'text-align: center;'));
+        if (lab) {
+            const row = new St.BoxLayout({
+                x_align: Clutter.ActorAlign.CENTER, style: `spacing: ${px(12)}px; padding-bottom: ${px(10)}px;`,
+            });
+            row.add_child(this._labBadge(px(46), labNo));
+            const who = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, y_align: Clutter.ActorAlign.CENTER});
+            for (const [t, st] of [
+                [`LAB MEM No.${labNo}`, `font-weight: 700; font-size: ${px(12)}px; letter-spacing: ${px(1.4)}px; color: #c98a3a;`],
+                [labName, `font-weight: 600; font-size: ${px(18)}px; color: #fff;`],
+            ]) {
+                const l = new St.Label({text: t, style: `font-family: ${SANS}; ${st}`});
+                l.clutter_text.ellipsize = 0;
+                who.add_child(l);
+            }
+            row.add_child(who);
+            this._pin.add_child(row);
+        }
         const pinMode = this._lc.auth_mode === 'pin';
         this._pin.add_child(this._text(
             `Save 01 · ${name} · Worldline 1.048596\n` + (this._lc.auth_mode === 'none' ? 'Loading save data …'
@@ -357,6 +449,38 @@ export class LockScreen {
         this._pin.add_child(this._meter);
         this._msg = this._text('', `font-family: ${SANS}; font-size: ${px(13)}px; color: #e83f8f; text-align: center; padding-top: ${px(10)}px;`);
         this._pin.add_child(this._msg);
+
+        // --- D-Mail: write one (Tab / EXTRA) ---
+        const dmMax = Math.max(1, Math.min(280, Number(this._cfg.dmail.max_bytes) || 36));
+        this._dmMax = dmMax;
+        const box = `font-family: Special Elite, ${SANS}; font-size: ${px(22)}px; color: #ffd9a0; background-color: #120d08;` +
+            `border: 1px solid #a35a00; padding: ${px(14)}px ${px(16)}px;`;
+        this._dm = this._panel(640);
+        this._dm.add_child(this._text('D-MAIL — SEND TO THE NEXT BOOT', h3));
+        this._dm.add_child(this._text(
+            `Whoever starts this machine next reads it on this screen. ${dmMax} bytes, as the PhoneWave allows.`, pst));
+        this._dmLabel = this._text('', box);
+        this._dm.add_child(this._dmLabel);
+        this._dmCount = this._text('', pst + `padding-top: ${px(10)}px; padding-bottom: 0; color: #9aa;`);
+        this._dm.add_child(this._dmCount);
+
+        // --- D-Mail: one has arrived ---
+        this._dmIn = this._panel(640);
+        this._dmIn.add_child(this._text('D-MAIL RECEIVED', h3));
+        this._dmInMeta = this._text('', pst);
+        this._dmIn.add_child(this._dmInMeta);
+        this._dmInBody = this._text('', box);
+        this._dmIn.add_child(this._dmInBody);
+        this._dmInHint = this._text('', pst + `padding-top: ${px(10)}px; padding-bottom: 0; color: #9aa;`);
+        this._dmIn.add_child(this._dmInHint);
+        this._dmIn.connect('button-release-event', () => { this._nextIncoming(); return Clutter.EVENT_STOP; });
+
+        this._dmHint = new St.Label({
+            visible: false, text: 'Tab — D-Mail',
+            style: `font-family: ${SANS}; font-weight: 600; font-size: ${px(13)}px; color: #ddd; background-color: rgba(0,0,0,0.55);` +
+                `border: 1px solid rgba(255,255,255,0.4); border-radius: ${px(14)}px; padding: ${px(5)}px ${px(12)}px;`,
+        });
+        this._frame.add_child(this._dmHint);
 
         // --- toast ---
         this._toast = new St.Label({
@@ -421,8 +545,11 @@ export class LockScreen {
     _go(stage) {
         if (!this.actor) return;
         // title_screen = false: no title menu at all, the nixie panel is the whole lock screen
-        if (stage === 'menu' && this._lc.title_screen === false) stage = 'pin';
-        const bare = stage === 'pin' && this._lc.title_screen === false;
+        const noTitle = this._lc.title_screen === false;
+        if (stage === 'menu' && noTitle) stage = 'pin';
+        // a D-Mail from before this boot is read before anything else
+        if ((stage === 'menu' || stage === 'pin') && this._incoming.length) stage = 'dmail-in';
+        const bare = noTitle && ['pin', 'dmail', 'dmail-in'].includes(stage);
         const prev = this._stage;
         this._stage = stage;
         const media = stage !== 'boot' && stage !== 'power';
@@ -432,6 +559,11 @@ export class LockScreen {
         this._pin.visible = stage === 'pin';
         this._power.visible = stage === 'power';
         this._skip.visible = stage === 'boot';
+        this._dm.visible = stage === 'dmail';
+        this._dmIn.visible = stage === 'dmail-in';
+        this._dmHint.visible = this._cfg.dmail.enabled && (stage === 'boot' || stage === 'pin' || stage === 'users');
+        if (this._dmHint.visible)
+            this._dmHint.set_position(Math.max(0, -this._frame.x) + this._px(24), this._frame.height - this._px(44));
         this._toast.remove_all_transitions();
         this._toast.hide();
         this._power.remove_all_transitions();
@@ -440,13 +572,14 @@ export class LockScreen {
             this._fadeIn(this._frame, stage === 'boot' ? 400 : 900);
 
         if (!media) {
-            for (const k of ['_loop', '_music']) { try { this[k]?.destroy(); } catch {} this[k] = null; }
+            for (const k of ['_loop', '_music', '_amb']) { try { this[k]?.destroy(); } catch {} this[k] = null; }
         } else if (this._boot) {
             try { this._boot.destroy(); } catch {}
             this._boot = null;
             this._videoBox.destroy_all_children();
         }
         this._still.visible = media && !bare;
+        if (media) this._startAmbience();
 
         switch (stage) {
         case 'boot':
@@ -491,6 +624,99 @@ export class LockScreen {
             this._ensurePrompt();
             this._beep('select');
             break;
+        case 'dmail':
+            if (!bare) { this._startLoop(); this._paint(); }
+            if (prev !== stage) this._dmText = '';
+            this._renderDmail();
+            this._center(this._dm);
+            if (prev !== stage) { this._popIn(this._dm); this._beep('select'); }
+            break;
+        case 'dmail-in':
+            if (!bare) { this._startLoop(); this._paint(); }
+            this._renderIncoming();
+            this._center(this._dmIn);
+            if (prev !== stage) {
+                this._popIn(this._dmIn);
+                if (this._lc.sounds) playSound('dmail', 'select');
+            }
+            break;
+        }
+    }
+
+    // ---------- D-Mail ----------
+    _openDmail() {
+        if (!this._cfg.dmail.enabled || !DMAIL_FROM.includes(this._stage)) return;
+        // not while PAM is checking a typed secret
+        if (this._stage === 'pin' && this._busy && this._lc.auth_mode !== 'none') return;
+        if (dmailCount() >= MAX_DMAILS) {
+            this._showToast('D-Mail → the outbox is full. Boot once to receive them.');
+            return;
+        }
+        this._dmReturn = {boot: 'menu', sub: 'menu'}[this._stage] ?? this._stage;
+        this._go('dmail');
+    }
+
+    _renderDmail() {
+        this._dmLabel.text = `${this._dmText}▌`;
+        const used = enc.encode(this._dmText).length;
+        this._dmCount.text = `${used} / ${this._dmMax} bytes · Enter = send · Esc = cancel`;
+    }
+
+    _dmailKey(sym, ch, enter) {
+        if (sym === Clutter.KEY_Escape) {
+            this._go(this._dmReturn);
+            return;
+        }
+        if (enter) {
+            const text = this._dmText.trim();
+            if (!text) return;
+            let sent = true;
+            try {
+                saveDmail(text, this._lc.lab_member_name || this._lc.display_name || GLib.get_user_name());
+            } catch (e) {
+                sent = false;
+                console.warn(`[sg-shell] D-Mail not saved: ${e}`);
+            }
+            this._beep(sent ? 'ok' : 'wrong');
+            this._go(this._dmReturn);
+            this._showToast(sent ? 'D-Mail sent. It arrives at the next boot.' : 'D-Mail failed: could not be saved.');
+            return;
+        }
+        if (sym === Clutter.KEY_BackSpace) {
+            this._dmText = [...this._dmText].slice(0, -1).join('');
+            this._beep('back');
+        } else if (ch && ch >= ' ' && ch !== '\x7f') {
+            if (enc.encode(this._dmText + ch).length > this._dmMax) return;
+            this._dmText += ch;
+            this._beep('digit1');
+        } else {
+            return;
+        }
+        this._renderDmail();
+    }
+
+    _renderIncoming() {
+        const d = this._incoming[0];
+        if (!d) return;
+        const when = d.ts ? GLib.DateTime.new_from_unix_local(d.ts)?.format('%-m.%-d %H:%M') : null;
+        this._dmInMeta.text = `From: ${d.from || 'unknown'}${when ? ` · sent ${when}` : ''} · before this boot`;
+        this._dmInBody.text = d.text;
+        const more = this._incoming.length - 1;
+        this._dmInHint.text = (more > 0 ? `${more} more · ` : '') + 'Enter = continue · it is kept in the phone\'s inbox';
+    }
+
+    _nextIncoming() {
+        const d = this._incoming.shift();
+        if (d) {
+            try { deliverDmail(d); } catch (e) { console.warn(`[sg-shell] D-Mail not delivered: ${e}`); }
+        }
+        if (this._incoming.length) {
+            this._renderIncoming();
+            this._center(this._dmIn);
+            this._popIn(this._dmIn);
+            this._beep('select');
+        } else {
+            this._go('menu');
         }
     }
 
@@ -519,7 +745,8 @@ export class LockScreen {
         if (k === 'CONTINUE') { this._subSel = 0; this._go('sub'); }
         else if (k === 'NEW GAME') this._showToast('NEW GAME → creating a Linux account needs the owner\'s approval — see BUILD-NOTES.md');
         else if (k === 'EXIT GAME') this._go('power');
-        else if (k === 'HELP') this._showToast('← → move · ↑ EXIT GAME · Enter select · Esc back · F12 stock lock screen');
+        else if (k === 'EXTRA' && this._cfg.dmail.enabled) this._openDmail();
+        else if (k === 'HELP') this._showToast('← → move · ↑ EXIT GAME · Enter select · Esc back · Tab D-Mail · F12 stock lock screen');
         else this._showToast(`${k} → not wired`);
     }
 
@@ -552,6 +779,10 @@ export class LockScreen {
     _key(sym, ch, ctrlShift = false) {
         const K = Clutter;
         const enter = sym === K.KEY_Return || sym === K.KEY_KP_Enter;
+        if ((sym === K.KEY_Tab || sym === K.KEY_ISO_Left_Tab) && DMAIL_FROM.includes(this._stage)) {
+            this._openDmail();
+            return;
+        }
         switch (this._stage) {
         case 'boot':
             if (sym === K.KEY_Escape) this._go('menu');
@@ -581,6 +812,12 @@ export class LockScreen {
             break;
         case 'pin':
             this._pinKey(sym, ch, enter);
+            break;
+        case 'dmail':
+            this._dmailKey(sym, ch, enter);
+            break;
+        case 'dmail-in':
+            if (enter || sym === K.KEY_Escape || sym === K.KEY_space) this._nextIncoming();
             break;
         }
     }
@@ -710,8 +947,8 @@ export class LockScreen {
 
     _onFailed() {
         if (!this.actor || this._stage !== 'pin') return;
-        this._setMsg(this._lc.auth_mode === 'pin'
-            ? 'Wrong PIN. The worldline did not change.' : 'Wrong password. The worldline did not change.', '#e83f8f');
+        const what = this._lc.auth_mode === 'pin' ? 'Wrong PIN' : 'Wrong password';
+        this._setMsg(`${what}. The worldline is shifting …`, '#e83f8f');
         this._beep('wrong');
         // shake
         const p = this._pin, d = this._px(10);
@@ -721,10 +958,16 @@ export class LockScreen {
             p.ease({translation_x: seq[i], duration: 100, mode: Clutter.AnimationMode.EASE_OUT_QUAD, onComplete: () => step(i + 1)});
         };
         step(0);
-        // flicker random digits 8 × 60 ms, then clear
+        // flicker random digits 8 × 60 ms, land on a worldline that is not this one, then clear
         for (let i = 0; i < 8; i++)
             this._later(i * 60, () => this._renderSecret(true));
+        const wl = WRONG_WORLDLINES[Math.floor(Math.random() * WRONG_WORLDLINES.length)];
         this._later(8 * 60, () => {
+            if (this._stage !== 'pin') return;
+            this._meter.show8([wl[0], '.', ...wl.slice(2)]);
+            this._setMsg(`${what} — worldline ${wl}. Not the one you came from; the attractor field pulls you back.`, '#e83f8f');
+        });
+        this._later(8 * 60 + 1400, () => {
             this._busy = false;
             this._secret = '';
             this._renderSecret();

@@ -30,6 +30,8 @@ class Controller:
         self.history_messages = int(sec("memory").get("history_messages", 24))
         self.memory = _memory.Memory(max_facts=int(sec("memory").get("max_facts", 200)))
         self.gemini = thinking.Gemini(sec("thinking").get("model", ""))
+        self.salieri = thinking.Salieri(sec("salieri"))
+        self.link = "ok"              # ok | limited (rate-limited) | offline | salieri (local stand-in)
         self.mode = a.get("files", "ask")
         try:
             saved = json.loads(SETTINGS_FILE.read_text())
@@ -80,6 +82,8 @@ class Controller:
         if cmd == "amadeus_forget":
             self.memory.forget(msg.get("id"))
             return self.state()
+        if cmd == "amadeus_call_answer":
+            return self.call_answer(str(msg.get("raw", "")))
         if cmd == "amadeus_clear":
             if not self.busy:
                 self.memory.clear_history()
@@ -103,6 +107,7 @@ class Controller:
             "emotion": self.emotion, "picture": personality.picture_for(self.emotion, images),
             "busy": self.busy, "status": self.status, "pending": self.pending,
             "facts": self.memory.facts(), "log": log[-120:], "user": self.user,
+            "link": self.link, "channel": personality.channel_level(), "salieri": self.salieri.enabled,
             "personality_file": str(personality.PERSONALITY_FILE),
             "emotions_dir": str(personality.USER_EMOTIONS),
         }
@@ -113,11 +118,29 @@ class Controller:
             return self.state()
         if self.busy:
             return {"error": "still working on the last message"}
-        if not thinking.load_keys():
+        nick = personality.nickname_in(text)
+        # without a key she can still answer through Salieri, or at least object to a nickname
+        if not thinking.load_keys() and not self.salieri.enabled and not nick:
             return {"error": "no API key"}
         self.busy, self.status = True, "thinking"
+        if nick:
+            self.emotion = "annoyed"          # the face changes before the words arrive
         self.memory.add("user", text)
-        threading.Thread(target=self._work, daemon=True).start()
+        threading.Thread(target=self._work, args=(nick,), daemon=True).start()
+        return self.state()
+
+    # ---- calls: she rings the phone (a long job ended, the battery is low, it is 3 a.m.) ----
+    def call_line(self, reason, detail=""):
+        raw = personality.call_line(reason, detail)
+        return {"raw": raw, "segments": personality.split_reply(raw)}
+
+    def call_answer(self, raw):
+        """The owner picked up: what she says becomes part of the conversation."""
+        raw = raw.strip()[:2000]
+        if raw:
+            segments = personality.split_reply(raw)
+            self.memory.add("model", raw, segments)
+            self.emotion = segments[-1]["emotion"]
         return self.state()
 
     # ---- worker thread ----
@@ -134,11 +157,41 @@ class Controller:
             self.pending = None
         return self._allowed
 
-    def _work(self):
-        tools = thinking.Tools(self.memory, self.mode, self.roots, self._confirm, self._set_status)
+    def _answer_text(self, nick):
+        """Amadeus over the network; Salieri (local model) when she cannot be reached."""
+        extra = "\n\n".join(filter(None, [personality.channel_rules(),
+                                           personality.nickname_rule(nick) if nick else ""]))
+        why = "no API key"
+        if thinking.load_keys():
+            tools = thinking.Tools(self.memory, self.mode, self.roots, self._confirm, self._set_status)
+            try:
+                raw = thinking.think(self.gemini, self.memory, tools, self.user, self.history_messages, extra)
+                self.link = "ok"
+                return raw
+            except thinking.RateLimited:
+                self.link = "limited"
+                raise
+            except thinking.NetworkError as e:
+                why = str(e)
+        self.link = "offline"
+        if self.salieri.enabled:
+            self._set_status("no link · asking Salieri")
+            try:
+                raw = thinking.think_offline(self.salieri, self.memory, self.user, self.history_messages, extra)
+                self.link = "salieri"
+                return raw
+            except thinking.ApiError as e:
+                why = f"{why}; Salieri: {e}"
+        if nick:
+            return personality.nickname_canned(nick)
+        raise thinking.ApiError(f"no link to Amadeus ({why})")
+
+    def _work(self, nick=None):
         try:
-            raw = thinking.think(self.gemini, self.memory, tools, self.user, self.history_messages)
+            raw = self._answer_text(nick)
             segments = personality.split_reply(raw)
+            if nick:
+                segments = personality.force_annoyed(segments)
             self.memory.add("model", raw, segments)
             self.emotion = segments[-1]["emotion"]
         except thinking.ApiError as e:

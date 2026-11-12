@@ -3,4 +3,31 @@
 [ -f ~/.bashrc ] && . ~/.bashrc
 help() { if [ $# -eq 0 ]; then sg-help; else builtin help "$@"; fi; }
 PS1='\[\e[38;2;247;166;0m\]>\[\e[0m\] '
+
+# Phone hooks: Daru mails you about a failed build, Amadeus calls when a long job has ended.
+# PS0 notes when a command starts; the prompt hook looks at how it ended.
+__sg_apps="${XDG_DATA_HOME:-$HOME/.local/share}/sg-shell/apps"
+__sg_long=$(sed -n 's/^long_job_seconds *= *\([0-9][0-9]*\).*/\1/p' "${XDG_CONFIG_HOME:-$HOME/.config}/sg-shell/config.toml" 2>/dev/null | head -n1)
+__sg_long=${__sg_long:-120}
+__sg_t0=-1
+__sg_x=x   # must be set: bash skips the arithmetic below for an unset variable
+PS0='${__sg_x:0:$((__sg_t0=SECONDS,0))}'
+__sg_after() {
+    local st=$? dt cmd
+    [ "$__sg_t0" -ge 0 ] || return "$st"
+    dt=$((SECONDS - __sg_t0)); __sg_t0=-1
+    cmd=$(HISTTIMEFORMAT='' builtin history 1 | sed 's/^ *[0-9]* *//')
+    # things you sit in front of are not "jobs"
+    case "${cmd%% *}" in
+        vi|vim|nvim|nano|emacs|less|more|man|top|htop|btop|watch|ssh|mosh|tmux|screen|bash|zsh|fish|python|python3|node|claude|gemini|fg|sudo|su) return "$st" ;;
+    esac
+    if [ "$st" -ne 0 ] && [ "$st" -lt 128 ] && [[ "$cmd" =~ ^(make|gcc|g\+\+|cc|clang|clang\+\+|javac|cargo|go|npm|pnpm|yarn|mvn|gradle|\./gradlew|cmake|ninja|meson|tsc|makepkg)([[:space:]]|$) ]]; then
+        ("$__sg_apps/sg-mail" event build-failed "${cmd:0:80}" >/dev/null 2>&1 &)
+    fi
+    if [ "$__sg_long" -gt 0 ] && [ "$dt" -ge "$__sg_long" ] && [ "$st" -lt 128 ]; then
+        ("$__sg_apps/sg-phone" --call job "${cmd:0:80}|$dt|$st" >/dev/null 2>&1 &)
+    fi
+    return "$st"
+}
+PROMPT_COMMAND="__sg_after${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 sg-say "Console online. Type \"help\"."

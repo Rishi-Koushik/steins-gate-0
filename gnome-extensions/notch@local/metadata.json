@@ -1,0 +1,7 @@
+{
+  "uuid": "notch@local",
+  "name": "Notch",
+  "description": "Dynamic-island style notch under the camera: now playing, current activity and open windows. Hides in fullscreen.",
+  "shell-version": ["50"],
+  "version": 1
+}
